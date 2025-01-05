@@ -86,7 +86,7 @@ struct App {
     exit: bool,
     focus: Location,
     entities: Option<Vec<EntityMeta>>,
-    entities_receiver: Receiver<Vec<EntityMeta>>,
+    entities_receiver: Receiver<ThreadMessage<Vec<EntityMeta>>>,
     entities_index: usize,
     components: Option<Vec<(String, Value)>>,
     components_receiver: Option<Receiver<Vec<(String, Value)>>>,
@@ -102,6 +102,12 @@ enum Location {
 }
 
 #[derive(Debug)]
+enum ThreadMessage<T> {
+    Update(T),
+    Disconnected,
+}
+
+#[derive(Debug)]
 struct EntityMeta {
     id: u64,
     name: Option<String>,
@@ -113,11 +119,14 @@ fn run(mut app: App, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
         handle_events(&mut app)?;
 
         match app.entities_receiver.try_recv() {
-            Ok(entities) => {
+            Ok(ThreadMessage::Update(entities)) => {
                 app.entities = Some(entities);
             }
-            Err(TryRecvError::Disconnected) => {
+            Ok(ThreadMessage::Disconnected) => {
                 app.entities = None;
+            }
+            Err(TryRecvError::Disconnected) => {
+                panic!("Entity query thread closed");
             }
             Err(TryRecvError::Empty) => {}
         }
@@ -128,7 +137,7 @@ fn run(mut app: App, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                     app.components = Some(components);
                 }
                 Err(TryRecvError::Disconnected) => {
-                    app.entities = None;
+                    app.components = None;
                 }
                 Err(TryRecvError::Empty) => {}
             }
@@ -182,8 +191,22 @@ fn draw_body(app: &App, frame: &mut Frame, area: Rect) {
 fn draw_body_entities_list(app: &App, frame: &mut Frame, area: Rect) {
     const LINES_PER_ENTRY: u16 = 1;
 
+    let block = Block::default()
+        .borders(Borders::RIGHT)
+        .border_set(THICK)
+        .border_style(Style::default().fg(
+            if matches!(app.focus, Location::EntityList | Location::ComponentList) {
+                PRIMARY_COLOR
+            } else {
+                WHITE_COLOR
+            },
+        ));
+
     let Some(entities) = &app.entities else {
-        frame.render_widget(Paragraph::new(Text::raw("loading entities")), area);
+        frame.render_widget(
+            Paragraph::new(Text::styled("Nothing to show", Style::default().bold())).block(block),
+            area,
+        );
         return;
     };
 
@@ -223,17 +246,6 @@ fn draw_body_entities_list(app: &App, frame: &mut Frame, area: Rect) {
             )
         })
         .collect();
-
-    let block = Block::default()
-        .borders(Borders::RIGHT)
-        .border_set(THICK)
-        .border_style(Style::default().fg(
-            if matches!(app.focus, Location::EntityList | Location::ComponentList) {
-                PRIMARY_COLOR
-            } else {
-                WHITE_COLOR
-            },
-        ));
 
     frame.render_widget(Paragraph::new(list_text).block(block.clone()), list_area);
 
@@ -426,7 +438,7 @@ fn handle_events(app: &mut App) -> std::io::Result<()> {
 }
 
 fn setup_query_thread(
-    sender: Sender<Vec<EntityMeta>>,
+    sender: Sender<ThreadMessage<Vec<EntityMeta>>>,
     agent: ureq::Agent,
     socket: SocketAddr,
     polling_rate: u8,
@@ -435,7 +447,7 @@ fn setup_query_thread(
         let duration = Duration::from_secs_f32(1.0 / polling_rate as f32);
         let mut last_time = Instant::now();
         loop {
-            let Some(result) = brp_request(
+            if let Some(result) = brp_request(
                 brp::BRP_QUERY_METHOD,
                 json!({
                     "data": {
@@ -444,26 +456,25 @@ fn setup_query_thread(
                 }),
                 agent.clone(),
                 socket,
-            ) else {
-                return;
+            ) {
+                let rows = serde_json::from_value::<Vec<brp::BrpQueryRow>>(result)
+                    .expect("Failed to parse payload");
+
+                let mut entities =
+                    rows.iter()
+                        .map(|row| EntityMeta {
+                            id: row.entity,
+                            name: row.components.get("bevy_core::name::Name").map(|name| {
+                                name.get("name").unwrap().as_str().unwrap().to_string()
+                            }),
+                        })
+                        .collect::<Vec<EntityMeta>>();
+
+                entities.sort_by_key(|e| e.id);
+                sender.send(ThreadMessage::Update(entities)).unwrap();
+            } else {
+                sender.send(ThreadMessage::Disconnected).unwrap();
             };
-
-            let rows = serde_json::from_value::<Vec<brp::BrpQueryRow>>(result)
-                .expect("Failed to parse payload");
-
-            let mut entities = rows
-                .iter()
-                .map(|row| EntityMeta {
-                    id: row.entity,
-                    name: row
-                        .components
-                        .get("bevy_core::name::Name")
-                        .map(|name| name.get("name").unwrap().as_str().unwrap().to_string()),
-                })
-                .collect::<Vec<EntityMeta>>();
-
-            entities.sort_by_key(|e| e.id);
-            sender.send(entities).unwrap();
 
             // Sleep for the remaining time until the next poll.
             std::thread::sleep(duration.saturating_sub(last_time.elapsed()));
@@ -551,7 +562,6 @@ fn brp_request(
         });
 
     let Ok(response) = result else {
-        println!("Failed to send request");
         return None;
     };
 
