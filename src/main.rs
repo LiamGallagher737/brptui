@@ -209,10 +209,10 @@ fn draw_body_entities_list(app: &App, frame: &mut Frame, area: Rect) {
         .enumerate()
         .map(|(n, entity_meta)| {
             let selected = n + (page * per_page) == app.entities_index;
-            let name = entity_meta
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("Entity {}", entity_meta.id));
+            let name = entity_meta.name.clone().unwrap_or_else(|| {
+                let entity = format!("{}v{}", entity_meta.id as u32, entity_meta.id >> 32);
+                format!("Entity {entity}")
+            });
             Line::styled(
                 format!("{}{name}", if selected { "> " } else { "" }),
                 if selected && app.focus == Location::EntityList {
