@@ -466,7 +466,7 @@ fn setup_query_thread(
             sender.send(entities).unwrap();
 
             // Sleep for the remaining time until the next poll.
-            std::thread::sleep(duration - last_time.elapsed());
+            std::thread::sleep(duration.saturating_sub(last_time.elapsed()));
             last_time = Instant::now();
         }
     });
@@ -529,7 +529,7 @@ fn setup_get_thread(app: &mut App) {
             }
 
             // Sleep for the remaining time until the next poll.
-            std::thread::sleep(duration - last_time.elapsed());
+            std::thread::sleep(duration.saturating_sub(last_time.elapsed()));
             last_time = Instant::now();
         }
     });
