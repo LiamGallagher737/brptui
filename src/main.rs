@@ -11,7 +11,15 @@ use ratatui::{
     Frame,
 };
 use serde_json::Value;
-use std::{net::SocketAddr, sync::mpsc, thread};
+use std::{
+    collections::VecDeque,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc,
+    },
+    thread,
+};
 
 mod brp;
 mod events;
@@ -46,6 +54,7 @@ enum State {
         entities_list: PaginatedListState,
         components: Vec<(String, Value)>,
         components_list: PaginatedListState,
+        components_thread_quitter: Option<ThreadQuitToken>,
     },
     #[default]
     Disconnected,
@@ -96,18 +105,14 @@ fn main() -> std::io::Result<()> {
     let querying_tx = tx.clone();
     thread::spawn(move || brp::handle_entity_querying(querying_tx, &model.socket));
 
-    // Panic rather than return `Err` within loop to ensure terminal is restored.
-    // TODO: Improve this so an error can be returned.
     while !matches!(model.state, State::Done) {
-        // Render the current view
-        terminal.draw(|f| view(&mut model, f)).unwrap();
-
-        // Wait for next external message.
         let mut next_msg = Some(rx.recv().unwrap());
 
         // Process updates as long as they return a non-None message.
+        // Render after every update so stateful widgets can update their state.
         while let Some(msg) = next_msg {
             next_msg = update(&mut model, msg);
+            terminal.draw(|f| view(&mut model, f))?;
         }
     }
 
@@ -137,6 +142,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
             entities_list,
             components,
             components_list,
+            ..
         } => {
             let body_layout = Layout::new(
                 Direction::Horizontal,
@@ -219,7 +225,10 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                 components_list,
                 ..
             } => match model.focus {
-                Focus::Entities => entities_list.select_previous(),
+                Focus::Entities => {
+                    entities_list.select_previous();
+                    return Some(Message::SpawnComponnentsThread);
+                }
                 Focus::Components => components_list.select_previous(),
                 _ => {}
             },
@@ -231,7 +240,10 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                 components_list,
                 ..
             } => match model.focus {
-                Focus::Entities => entities_list.select_next(),
+                Focus::Entities => {
+                    entities_list.select_next();
+                    return Some(Message::SpawnComponnentsThread);
+                }
                 Focus::Components => components_list.select_next(),
                 _ => {}
             },
@@ -243,7 +255,10 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                 components_list,
                 ..
             } => match model.focus {
-                Focus::Entities => entities_list.select_previous_page(),
+                Focus::Entities => {
+                    entities_list.select_previous_page();
+                    return Some(Message::SpawnComponnentsThread);
+                }
                 Focus::Components => components_list.select_previous_page(),
                 _ => {}
             },
@@ -255,7 +270,10 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                 components_list,
                 ..
             } => match model.focus {
-                Focus::Entities => entities_list.select_next_page(),
+                Focus::Entities => {
+                    entities_list.select_next_page();
+                    return Some(Message::SpawnComponnentsThread);
+                }
                 Focus::Components => components_list.select_next_page(),
                 _ => {}
             },
@@ -285,13 +303,19 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             if let State::Connected {
                 entities,
                 entities_list,
+                components_thread_quitter,
                 ..
-            } = &model.state
+            } = &mut model.state
             {
+                if let Some(quitter) = components_thread_quitter {
+                    quitter.quit();
+                }
                 let tx = model.message_tx.clone();
                 let socket = model.socket;
                 let entity = entities[entities_list.selected()].id;
-                thread::spawn(move || handle_components_querying(tx, &socket, entity));
+                let quitter = ThreadQuitToken::new();
+                *components_thread_quitter = Some(quitter.clone());
+                thread::spawn(move || handle_components_querying(tx, &socket, entity, quitter));
             }
         }
         Message::UpdateEntities(new_entities) => match &mut model.state {
@@ -302,6 +326,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                     entities_list: PaginatedListState::default(),
                     components: Vec::new(),
                     components_list: PaginatedListState::default(),
+                    components_thread_quitter: None,
                 };
                 return Some(Message::SpawnComponnentsThread);
             }
@@ -327,5 +352,26 @@ fn border_style(focused: bool) -> Style {
         Style::default().fg(PRIMARY_COLOR)
     } else {
         Style::default().dim()
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+struct ThreadQuitToken {
+    quit: Arc<AtomicBool>,
+}
+
+impl ThreadQuitToken {
+    fn new() -> Self {
+        Self {
+            quit: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn quit(&mut self) {
+        self.quit.store(true, Ordering::Relaxed);
+    }
+
+    fn should_quit(&self) -> bool {
+        self.quit.load(Ordering::Relaxed)
     }
 }

@@ -1,4 +1,4 @@
-use crate::Message;
+use crate::{Message, ThreadQuitToken};
 use anyhow::anyhow;
 use bevy_ecs::entity::Entity;
 use bevy_remote::{
@@ -82,7 +82,12 @@ pub fn handle_entity_querying(tx: mpsc::Sender<Message>, socket: &SocketAddr) {
     }
 }
 
-pub fn handle_components_querying(tx: mpsc::Sender<Message>, socket: &SocketAddr, entity: Entity) {
+pub fn handle_components_querying(
+    tx: mpsc::Sender<Message>,
+    socket: &SocketAddr,
+    entity: Entity,
+    quit: ThreadQuitToken,
+) {
     let Ok(components) = list_request(&socket, BrpListParams { entity }) else {
         tx.send(Message::CommunicationFailed).unwrap();
         return;
@@ -96,6 +101,10 @@ pub fn handle_components_querying(tx: mpsc::Sender<Message>, socket: &SocketAddr
 
     let mut last_time = Instant::now();
     loop {
+        if quit.should_quit() {
+            return;
+        }
+
         if let Ok(BrpGetResponse::Lenient {
             components,
             errors: _,
