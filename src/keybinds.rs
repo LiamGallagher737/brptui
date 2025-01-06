@@ -25,12 +25,13 @@ impl Widget for Keybinds {
                 .drain(..)
                 .enumerate()
                 .flat_map(|(n, (key, description))| {
+                    let dim = Style::default().dim();
                     [
-                        Span::styled(key, Style::default().dim().bold()),
+                        Span::styled(key, dim.bold()),
                         Span::raw(" "),
-                        Span::styled(description, Style::default().dim()),
+                        Span::styled(description, dim),
                         if n != keybinds_len - 1 {
-                            Span::styled(" • ", Style::default().dim())
+                            Span::styled(" • ", dim)
                         } else {
                             Span::default()
                         },

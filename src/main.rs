@@ -2,10 +2,9 @@ use brp::EntityMeta;
 use keybinds::Keybinds;
 use paginated_list::{PaginatedList, PaginatedListState};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Stylize},
-    symbols::border::THICK,
-    text::{Line, Span, Text},
+    layout::{Constraint, Direction, Layout},
+    style::{palette::material::WHITE, Color, Style, Stylize},
+    text::Text,
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
@@ -17,7 +16,6 @@ mod keybinds;
 mod paginated_list;
 
 const PRIMARY_COLOR: Color = Color::Rgb(37, 160, 101);
-const WHITE_COLOR: Color = Color::Rgb(255, 253, 245);
 
 #[derive(Debug)]
 struct Model {
@@ -124,10 +122,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
         .split(frame.area());
 
     // Header
-    let text = Text::styled(
-        " brptui ",
-        Style::default().fg(WHITE_COLOR).bg(PRIMARY_COLOR),
-    );
+    let text = Text::styled(" brptui ", Style::default().fg(WHITE).bg(PRIMARY_COLOR));
     frame.render_widget(Paragraph::new(text), layout[0]);
 
     // Body
@@ -148,18 +143,18 @@ fn view(model: &mut Model, frame: &mut Frame) {
 
             let entities_block = Block::default()
                 .borders(Borders::RIGHT)
-                .border_set(THICK)
-                //.border_type(BorderType::Thick)
-                .border_style(Style::default().fg(
-                    if matches!(model.focus, Focus::Entities | Focus::Components) {
-                        PRIMARY_COLOR
-                    } else {
-                        WHITE_COLOR
-                    },
-                ));
+                .border_type(BorderType::Thick)
+                .border_style(border_style(matches!(
+                    model.focus,
+                    Focus::Entities | Focus::Components
+                )));
 
             frame.render_stateful_widget(
-                PaginatedList::new(entities.iter().map(EntityMeta::title)).block(entities_block),
+                PaginatedList::new(
+                    entities.iter().map(EntityMeta::title),
+                    model.focus == Focus::Entities,
+                )
+                .block(entities_block),
                 body_layout[0],
                 entities_list,
             );
@@ -245,4 +240,12 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
     };
 
     None
+}
+
+fn border_style(focused: bool) -> Style {
+    if focused {
+        Style::default().fg(PRIMARY_COLOR)
+    } else {
+        Style::default().dim()
+    }
 }

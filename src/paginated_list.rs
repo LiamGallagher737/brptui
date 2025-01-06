@@ -11,13 +11,15 @@ use crate::PRIMARY_COLOR;
 pub struct PaginatedList<'a> {
     block: Option<Block<'a>>,
     items: Vec<Line<'a>>,
+    focused: bool,
 }
 
 impl<'a> PaginatedList<'a> {
-    pub fn new<T: IntoIterator<Item = Line<'a>>>(items: T) -> Self {
+    pub fn new<T: IntoIterator<Item = Line<'a>>>(items: T, focused: bool) -> Self {
         Self {
             items: items.into_iter().map(Into::into).collect(),
             block: None,
+            focused,
         }
     }
 
@@ -122,14 +124,17 @@ impl StatefulWidget for PaginatedList<'_> {
             if n != page_selected {
                 line.render(item_area, buf);
             } else {
+                let style = if self.focused {
+                    Style::default().fg(PRIMARY_COLOR)
+                } else {
+                    Style::default()
+                };
                 buf[item_area.as_position()]
                     .set_char('>')
-                    .set_style(Style::default().bold().fg(PRIMARY_COLOR));
+                    .set_style(style.bold());
                 item_area.x += 2;
                 item_area.width -= 2;
-                line.clone()
-                    .style(Style::default().fg(PRIMARY_COLOR))
-                    .render(item_area, buf);
+                line.clone().style(style).render(item_area, buf);
             }
         }
 
