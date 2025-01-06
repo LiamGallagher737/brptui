@@ -7,6 +7,10 @@ use bevy_remote::{
     },
     BrpPayload, BrpRequest,
 };
+use ratatui::{
+    style::Stylize,
+    text::{Line, Span},
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -22,6 +26,20 @@ pub const QUERY_COOLDOWN: Duration = Duration::from_millis(100);
 pub struct EntityMeta {
     pub id: Entity,
     pub name: Option<String>,
+}
+
+impl EntityMeta {
+    pub fn title(&self) -> Line {
+        Line::from(vec![
+            Span::raw(self.name()).bold(),
+            Span::raw(" "),
+            Span::raw(self.id.to_string()).dim(),
+        ])
+    }
+
+    pub fn name(&self) -> String {
+        self.name.clone().unwrap_or_else(|| String::from("Entity"))
+    }
 }
 
 /// Query the connected BRP-enabled Bevy app every [`QUERY_COOLDOWN`] seconds.

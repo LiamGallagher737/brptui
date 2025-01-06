@@ -25,6 +25,8 @@ fn handle_key(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Right | KeyCode::Char('l') => Some(Message::MoveRight),
         KeyCode::Up | KeyCode::Char('k') => Some(Message::MoveUp),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::MoveDown),
+        KeyCode::PageUp | KeyCode::Char('[') => Some(Message::PageUp),
+        KeyCode::PageDown | KeyCode::Char(']') => Some(Message::PageDown),
         KeyCode::Char('q') => Some(Message::Quit),
         _ => None,
     }

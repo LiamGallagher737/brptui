@@ -1,14 +1,17 @@
+use brp::EntityMeta;
+use paginated_list::{PaginatedList, PaginatedListState};
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style},
-    text::{Line, Text},
-    widgets::Paragraph,
+    text::Text,
+    widgets::{HighlightSpacing, List, ListState, Paragraph},
     Frame,
 };
 use std::{net::SocketAddr, sync::mpsc, thread};
 
 mod brp;
 mod events;
+mod paginated_list;
 
 const PRIMARY_COLOR: Color = Color::Rgb(37, 160, 101);
 const WHITE_COLOR: Color = Color::Rgb(255, 253, 245);
@@ -37,7 +40,8 @@ impl Default for Model {
 #[derive(Debug, Default)]
 enum State {
     Connected {
-        entities: Vec<brp::EntityMeta>,
+        entities: Vec<EntityMeta>,
+        entities_list: PaginatedListState,
     },
     #[default]
     Disconnected,
@@ -50,7 +54,9 @@ enum Message {
     MoveRight,
     MoveUp,
     MoveDown,
-    UpdateEntities(Vec<brp::EntityMeta>),
+    PageUp,
+    PageDown,
+    UpdateEntities(Vec<EntityMeta>),
     CommunicationFailed,
     Quit,
 }
@@ -88,7 +94,7 @@ fn main() -> std::io::Result<()> {
     // TODO: Improve this so an error can be returned.
     while !matches!(model.state, State::Done) {
         // Render the current view
-        terminal.draw(|f| view(&model, f)).unwrap();
+        terminal.draw(|f| view(&mut model, f)).unwrap();
 
         // Wait for next external message.
         let mut next_msg = Some(rx.recv().unwrap());
@@ -103,7 +109,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn view(model: &Model, frame: &mut Frame) {
+fn view(model: &mut Model, frame: &mut Frame) {
     let layout = Layout::default()
         .constraints([
             Constraint::Length(1), // Header
@@ -122,18 +128,15 @@ fn view(model: &Model, frame: &mut Frame) {
     frame.render_widget(Paragraph::new(text), layout[0]);
 
     // Body
-    match &model.state {
-        State::Connected { entities } => {
-            frame.render_widget(
-                Paragraph::new(
-                    entities
-                        .iter()
-                        .map(|entity| {
-                            Line::raw(entity.name.clone().unwrap_or_else(|| entity.id.to_string()))
-                        })
-                        .collect::<Vec<_>>(),
-                ),
+    match &mut model.state {
+        State::Connected {
+            entities,
+            entities_list,
+        } => {
+            frame.render_stateful_widget(
+                PaginatedList::new(entities.iter().map(EntityMeta::title)),
                 layout[1],
+                entities_list,
             );
         }
         State::Disconnected => {
@@ -141,9 +144,17 @@ fn view(model: &Model, frame: &mut Frame) {
         }
         State::Done => {}
     }
+
+    // Footer
+    let text = Text::styled(
+        " brptui ",
+        Style::default().fg(WHITE_COLOR).bg(PRIMARY_COLOR),
+    );
+    frame.render_widget(Paragraph::new(text), layout[2]);
 }
 
 fn update(model: &mut Model, msg: Message) -> Option<Message> {
+    // Will be able to improve with https://github.com/rust-lang/rust/issues/51114
     match msg {
         Message::MoveLeft => match model.focus {
             Focus::Components => model.focus = Focus::Entitties,
@@ -155,26 +166,46 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             Focus::Components => model.focus = Focus::Inspector,
             _ => {}
         },
-        Message::MoveUp => {
-            let focus = model.focus as usize;
-            if model.selected_indicies[focus] > 0 {
-                model.selected_indicies[focus] -= 1;
-            } else {
-                model.selected_indicies[focus] = model.max_indicies[focus] - 1;
+        Message::MoveUp => match &mut model.state {
+            State::Connected {
+                entities: _,
+                entities_list,
+            } => entities_list.select_previous(),
+            _ => {}
+        },
+        Message::MoveDown => match &mut model.state {
+            State::Connected {
+                entities: _,
+                entities_list,
+            } => entities_list.select_next(),
+            _ => {}
+        },
+        Message::PageUp => match &mut model.state {
+            State::Connected {
+                entities: _,
+                entities_list,
+            } => entities_list.select_previous_page(),
+            _ => {}
+        },
+        Message::PageDown => match &mut model.state {
+            State::Connected {
+                entities: _,
+                entities_list,
+            } => entities_list.select_next_page(),
+            _ => {}
+        },
+        Message::UpdateEntities(new_entities) => match &mut model.state {
+            State::Connected {
+                entities,
+                entities_list: _,
+            } => *entities = new_entities,
+            _ => {
+                model.state = State::Connected {
+                    entities: new_entities,
+                    entities_list: PaginatedListState::default(),
+                };
             }
-        }
-        Message::MoveDown => {
-            let focus = model.focus as usize;
-            if model.selected_indicies[focus] < model.max_indicies[focus] - 1 {
-                model.selected_indicies[focus] += 1;
-            } else {
-                model.selected_indicies[focus] = 0;
-            }
-        }
-        Message::UpdateEntities(entities) => {
-            model.max_indicies[Focus::Entitties as usize] = entities.len();
-            model.state = State::Connected { entities };
-        }
+        },
         Message::CommunicationFailed => {
             model.state = State::Disconnected;
         }
