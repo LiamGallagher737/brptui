@@ -37,19 +37,27 @@ enum CursorMove {
 }
 
 impl PaginatedListState {
+    pub fn selected(&self) -> usize {
+        self.selected
+    }
+
     pub fn select_previous(&mut self) {
+        assert!(self.cursor_move.is_none(), "Cursor move is being overridden");
         self.cursor_move = Some(CursorMove::Previous);
     }
 
     pub fn select_next(&mut self) {
+        assert!(self.cursor_move.is_none(), "Cursor move is being overridden");
         self.cursor_move = Some(CursorMove::Next);
     }
 
     pub fn select_previous_page(&mut self) {
+        assert!(self.cursor_move.is_none(), "Cursor move is being overridden");
         self.cursor_move = Some(CursorMove::PreviousPage);
     }
 
     pub fn select_next_page(&mut self) {
+        assert!(self.cursor_move.is_none(), "Cursor move is being overridden");
         self.cursor_move = Some(CursorMove::NextPage);
     }
 

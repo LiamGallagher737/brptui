@@ -1,16 +1,18 @@
 use brp::EntityMeta;
+use keybinds::Keybinds;
 use paginated_list::{PaginatedList, PaginatedListState};
 use ratatui::{
-    layout::{Constraint, Layout},
-    style::{Color, Style},
-    text::Text,
-    widgets::{HighlightSpacing, List, ListState, Paragraph},
+    layout::{Constraint, Layout, Rect},
+    style::{Color, Style, Stylize},
+    text::{Line, Span, Text},
+    widgets::Paragraph,
     Frame,
 };
 use std::{net::SocketAddr, sync::mpsc, thread};
 
 mod brp;
 mod events;
+mod keybinds;
 mod paginated_list;
 
 const PRIMARY_COLOR: Color = Color::Rgb(37, 160, 101);
@@ -66,7 +68,7 @@ enum Message {
 enum Focus {
     /// The panel listing all entities in the world.
     #[default]
-    Entitties,
+    Entities,
     /// The panel listing all (reflectable) components on the selected entity.
     Components,
     /// The panel displaying the value of the selected component.
@@ -146,23 +148,28 @@ fn view(model: &mut Model, frame: &mut Frame) {
     }
 
     // Footer
-    let text = Text::styled(
-        " brptui ",
-        Style::default().fg(WHITE_COLOR).bg(PRIMARY_COLOR),
-    );
-    frame.render_widget(Paragraph::new(text), layout[2]);
+    let mut keys = Keybinds::default();
+    keys.push("s", "search");
+    if model.focus == Focus::Entities {
+        keys.push("x", "despawn");
+    }
+    if model.focus == Focus::Components {
+        keys.push("x", "remove");
+    }
+    keys.push("q", "quit");
+    frame.render_widget(keys, layout[2]);
 }
 
 fn update(model: &mut Model, msg: Message) -> Option<Message> {
     // Will be able to improve with https://github.com/rust-lang/rust/issues/51114
     match msg {
         Message::MoveLeft => match model.focus {
-            Focus::Components => model.focus = Focus::Entitties,
+            Focus::Components => model.focus = Focus::Entities,
             Focus::Inspector => model.focus = Focus::Components,
             _ => {}
         },
         Message::MoveRight => match model.focus {
-            Focus::Entitties => model.focus = Focus::Components,
+            Focus::Entities => model.focus = Focus::Components,
             Focus::Components => model.focus = Focus::Inspector,
             _ => {}
         },
