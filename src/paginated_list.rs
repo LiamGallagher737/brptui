@@ -139,17 +139,19 @@ impl StatefulWidget for PaginatedList<'_> {
         }
 
         // Render pagination
-        let line = Line::from(
-            (0..total_pages)
-                .map(|n| {
-                    if n != page {
-                        Span::raw("• ").bold().dim()
-                    } else {
-                        Span::raw("• ").bold()
-                    }
-                })
-                .collect::<Vec<Span>>(),
-        );
-        buf.set_line(area.x, area.y + area.height - 1, &line, area.width);
+        if total_pages > 1 {
+            let line = Line::from(
+                (0..total_pages)
+                    .map(|n| {
+                        if n != page {
+                            Span::raw("• ").bold().dim()
+                        } else {
+                            Span::raw("• ").bold()
+                        }
+                    })
+                    .collect::<Vec<Span>>(),
+            );
+            buf.set_line(area.x, area.y + area.height - 1, &line, area.width);
+        }
     }
 }
