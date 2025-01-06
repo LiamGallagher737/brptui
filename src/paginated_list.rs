@@ -89,7 +89,7 @@ impl PaginatedListState {
 
             None => {}
         }
-        self.selected = self.selected.min(items - 1);
+        self.selected = self.selected.min(items.saturating_sub(1));
         self.cursor_move = None;
     }
 }

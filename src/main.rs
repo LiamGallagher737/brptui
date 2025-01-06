@@ -1,14 +1,16 @@
 use bevy_remote::builtin_methods::BrpDestroyParams;
-use brp::EntityMeta;
+use brp::{handle_components_querying, EntityMeta};
+use disqualified::ShortName;
 use keybinds::Keybinds;
 use paginated_list::{PaginatedList, PaginatedListState};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{palette::material::WHITE, Color, Style, Stylize},
-    text::Text,
-    widgets::{Block, BorderType, Borders, Paragraph},
+    text::{Line, Span, Text},
+    widgets::{Block, BorderType, Borders, Padding, Paragraph},
     Frame,
 };
+use serde_json::Value;
 use std::{net::SocketAddr, sync::mpsc, thread};
 
 mod brp;
@@ -23,14 +25,16 @@ struct Model {
     state: State,
     focus: Focus,
     socket: SocketAddr,
+    message_tx: mpsc::Sender<Message>,
 }
 
-impl Default for Model {
-    fn default() -> Self {
+impl Model {
+    fn new(message_tx: mpsc::Sender<Message>) -> Self {
         Self {
             state: Default::default(),
             focus: Default::default(),
             socket: brp::DEFAULT_SOCKET,
+            message_tx,
         }
     }
 }
@@ -40,6 +44,8 @@ enum State {
     Connected {
         entities: Vec<EntityMeta>,
         entities_list: PaginatedListState,
+        components: Vec<(String, Value)>,
+        components_list: PaginatedListState,
     },
     #[default]
     Disconnected,
@@ -55,7 +61,9 @@ enum Message {
     PageUp,
     PageDown,
     Delete,
+    SpawnComponnentsThread,
     UpdateEntities(Vec<EntityMeta>),
+    UpdateComponents(Vec<(String, Value)>),
     CommunicationFailed,
     Quit,
 }
@@ -76,10 +84,9 @@ enum Focus {
 
 fn main() -> std::io::Result<()> {
     let mut terminal = ratatui::init();
-    let mut model = Model::default();
 
-    // Setup a mpsc channel for messages to be sent from multiple threads.
     let (tx, rx) = mpsc::channel();
+    let mut model = Model::new(tx.clone());
 
     // Spawn crossterm event handler thread.
     let events_tx = tx.clone();
@@ -128,6 +135,8 @@ fn view(model: &mut Model, frame: &mut Frame) {
         State::Connected {
             entities,
             entities_list,
+            components,
+            components_list,
         } => {
             let body_layout = Layout::new(
                 Direction::Horizontal,
@@ -155,6 +164,21 @@ fn view(model: &mut Model, frame: &mut Frame) {
                 .block(entities_block),
                 body_layout[0],
                 entities_list,
+            );
+
+            frame.render_stateful_widget(
+                PaginatedList::new(
+                    components
+                        .iter()
+                        .map(|(name, _)| ShortName(name).to_string())
+                        .map(Span::raw)
+                        .map(Span::bold)
+                        .map(Line::from),
+                    model.focus == Focus::Components,
+                )
+                .block(Block::default().padding(Padding::horizontal(1))),
+                body_layout[1],
+                components_list,
             );
         }
         State::Disconnected => {
@@ -191,36 +215,57 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         },
         Message::MoveUp => match &mut model.state {
             State::Connected {
-                entities: _,
                 entities_list,
-            } => entities_list.select_previous(),
+                components_list,
+                ..
+            } => match model.focus {
+                Focus::Entities => entities_list.select_previous(),
+                Focus::Components => components_list.select_previous(),
+                _ => {}
+            },
             _ => {}
         },
         Message::MoveDown => match &mut model.state {
             State::Connected {
-                entities: _,
                 entities_list,
-            } => entities_list.select_next(),
+                components_list,
+                ..
+            } => match model.focus {
+                Focus::Entities => entities_list.select_next(),
+                Focus::Components => components_list.select_next(),
+                _ => {}
+            },
             _ => {}
         },
         Message::PageUp => match &mut model.state {
             State::Connected {
-                entities: _,
                 entities_list,
-            } => entities_list.select_previous_page(),
+                components_list,
+                ..
+            } => match model.focus {
+                Focus::Entities => entities_list.select_previous_page(),
+                Focus::Components => components_list.select_previous_page(),
+                _ => {}
+            },
             _ => {}
         },
         Message::PageDown => match &mut model.state {
             State::Connected {
-                entities: _,
                 entities_list,
-            } => entities_list.select_next_page(),
+                components_list,
+                ..
+            } => match model.focus {
+                Focus::Entities => entities_list.select_next_page(),
+                Focus::Components => components_list.select_next_page(),
+                _ => {}
+            },
             _ => {}
         },
         Message::Delete => {
             if let State::Connected {
                 entities,
                 entities_list,
+                ..
             } = &mut model.state
             {
                 let socket = model.socket;
@@ -236,18 +281,36 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                 }
             }
         }
-        Message::UpdateEntities(new_entities) => match &mut model.state {
-            State::Connected {
+        Message::SpawnComponnentsThread => {
+            if let State::Connected {
                 entities,
-                entities_list: _,
-            } => *entities = new_entities,
+                entities_list,
+                ..
+            } = &model.state
+            {
+                let tx = model.message_tx.clone();
+                let socket = model.socket;
+                let entity = entities[entities_list.selected()].id;
+                thread::spawn(move || handle_components_querying(tx, &socket, entity));
+            }
+        }
+        Message::UpdateEntities(new_entities) => match &mut model.state {
+            State::Connected { entities, .. } => *entities = new_entities,
             _ => {
                 model.state = State::Connected {
                     entities: new_entities,
                     entities_list: PaginatedListState::default(),
+                    components: Vec::new(),
+                    components_list: PaginatedListState::default(),
                 };
+                return Some(Message::SpawnComponnentsThread);
             }
         },
+        Message::UpdateComponents(new_components) => {
+            if let State::Connected { components, .. } = &mut model.state {
+                *components = new_components;
+            }
+        }
         Message::CommunicationFailed => {
             model.state = State::Disconnected;
         }

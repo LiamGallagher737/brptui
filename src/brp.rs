@@ -82,6 +82,38 @@ pub fn handle_entity_querying(tx: mpsc::Sender<Message>, socket: &SocketAddr) {
     }
 }
 
+pub fn handle_components_querying(tx: mpsc::Sender<Message>, socket: &SocketAddr, entity: Entity) {
+    let Ok(components) = list_request(&socket, BrpListParams { entity }) else {
+        tx.send(Message::CommunicationFailed).unwrap();
+        return;
+    };
+
+    let params = BrpGetParams {
+        entity,
+        components,
+        strict: false,
+    };
+
+    let mut last_time = Instant::now();
+    loop {
+        if let Ok(BrpGetResponse::Lenient {
+            components,
+            errors: _,
+        }) = get_request(&socket, params.clone())
+        {
+            tx.send(Message::UpdateComponents(components.into_iter().collect()))
+                .unwrap();
+        } else {
+            tx.send(Message::CommunicationFailed).unwrap();
+            return;
+        }
+
+        // Sleep for the remaining time until the next query.
+        std::thread::sleep(QUERY_COOLDOWN.saturating_sub(last_time.elapsed()));
+        last_time = Instant::now();
+    }
+}
+
 /// Post a `bevy/get` request.
 pub fn get_request(socket: &SocketAddr, params: BrpGetParams) -> anyhow::Result<BrpGetResponse> {
     request::<BrpGetParams, BrpGetResponse>(
