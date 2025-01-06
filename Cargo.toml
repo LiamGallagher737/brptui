@@ -2,10 +2,12 @@
 name = "brptui"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/Liamgallagher737/brptui"
 
 [dependencies]
-argh = "0.1.13"
-crossterm = "0.28.1"
+anyhow = "1.0.95"
+bevy_ecs = "0.15.1"
+bevy_remote = { version = "0.15.1", default-features = false }
 disqualified = "1.0.0"
 ratatui = "0.29.0"
 serde = { version = "1.0.217", features = ["derive"] }
