@@ -2,10 +2,11 @@ use brp::EntityMeta;
 use keybinds::Keybinds;
 use paginated_list::{PaginatedList, PaginatedListState};
 use ratatui::{
-    layout::{Constraint, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
+    symbols::border::THICK,
     text::{Line, Span, Text},
-    widgets::Paragraph,
+    widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 use std::{net::SocketAddr, sync::mpsc, thread};
@@ -135,9 +136,31 @@ fn view(model: &mut Model, frame: &mut Frame) {
             entities,
             entities_list,
         } => {
+            let body_layout = Layout::new(
+                Direction::Horizontal,
+                [
+                    Constraint::Fill(1),
+                    Constraint::Fill(1),
+                    Constraint::Fill(2),
+                ],
+            )
+            .split(layout[1]);
+
+            let entities_block = Block::default()
+                .borders(Borders::RIGHT)
+                .border_set(THICK)
+                //.border_type(BorderType::Thick)
+                .border_style(Style::default().fg(
+                    if matches!(model.focus, Focus::Entities | Focus::Components) {
+                        PRIMARY_COLOR
+                    } else {
+                        WHITE_COLOR
+                    },
+                ));
+
             frame.render_stateful_widget(
-                PaginatedList::new(entities.iter().map(EntityMeta::title)),
-                layout[1],
+                PaginatedList::new(entities.iter().map(EntityMeta::title)).block(entities_block),
+                body_layout[0],
                 entities_list,
             );
         }

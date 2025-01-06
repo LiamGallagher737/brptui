@@ -20,6 +20,11 @@ impl<'a> PaginatedList<'a> {
             block: None,
         }
     }
+
+    pub fn block(mut self, block: Block<'a>) -> Self {
+        self.block = Some(block);
+        self
+    }
 }
 
 #[derive(Debug, Default)]
@@ -42,22 +47,22 @@ impl PaginatedListState {
     }
 
     pub fn select_previous(&mut self) {
-        assert!(self.cursor_move.is_none(), "Cursor move is being overridden");
+        assert!(self.cursor_move.is_none(), "cursor_move is set");
         self.cursor_move = Some(CursorMove::Previous);
     }
 
     pub fn select_next(&mut self) {
-        assert!(self.cursor_move.is_none(), "Cursor move is being overridden");
+        assert!(self.cursor_move.is_none(), "cursor_move is set");
         self.cursor_move = Some(CursorMove::Next);
     }
 
     pub fn select_previous_page(&mut self) {
-        assert!(self.cursor_move.is_none(), "Cursor move is being overridden");
+        assert!(self.cursor_move.is_none(), "cursor_move is set");
         self.cursor_move = Some(CursorMove::PreviousPage);
     }
 
     pub fn select_next_page(&mut self) {
-        assert!(self.cursor_move.is_none(), "Cursor move is being overridden");
+        assert!(self.cursor_move.is_none(), "cursor_move is set");
         self.cursor_move = Some(CursorMove::NextPage);
     }
 
@@ -121,6 +126,7 @@ impl StatefulWidget for PaginatedList<'_> {
                     .set_char('>')
                     .set_style(Style::default().bold().fg(PRIMARY_COLOR));
                 item_area.x += 2;
+                item_area.width -= 2;
                 line.clone()
                     .style(Style::default().fg(PRIMARY_COLOR))
                     .render(item_area, buf);
