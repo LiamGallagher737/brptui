@@ -1,6 +1,7 @@
 use bevy_remote::builtin_methods::BrpDestroyParams;
 use brp::{handle_components_querying, EntityMeta};
 use disqualified::ShortName;
+use inspector::{Inspector, InspectorState};
 use keybinds::Keybinds;
 use paginated_list::{PaginatedList, PaginatedListState};
 use ratatui::{
@@ -12,7 +13,6 @@ use ratatui::{
 };
 use serde_json::Value;
 use std::{
-    collections::VecDeque,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -23,6 +23,7 @@ use std::{
 
 mod brp;
 mod events;
+mod inspector;
 mod keybinds;
 mod paginated_list;
 
@@ -55,6 +56,7 @@ enum State {
         components: Vec<(String, Value)>,
         components_list: PaginatedListState,
         components_thread_quitter: Option<ThreadQuitToken>,
+        inspector: InspectorState,
     },
     #[default]
     Disconnected,
@@ -142,6 +144,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
             entities_list,
             components,
             components_list,
+            inspector,
             ..
         } => {
             let body_layout = Layout::new(
@@ -160,6 +163,15 @@ fn view(model: &mut Model, frame: &mut Frame) {
                 .border_style(border_style(matches!(
                     model.focus,
                     Focus::Entities | Focus::Components
+                )));
+
+            let inspector_block = Block::default()
+                .padding(Padding::left(1))
+                .borders(Borders::LEFT)
+                .border_type(BorderType::Thick)
+                .border_style(border_style(matches!(
+                    model.focus,
+                    Focus::Components | Focus::Inspector
                 )));
 
             frame.render_stateful_widget(
@@ -186,6 +198,14 @@ fn view(model: &mut Model, frame: &mut Frame) {
                 body_layout[1],
                 components_list,
             );
+
+            if let Some(selected_component) = components.get(components_list.selected()) {
+                frame.render_stateful_widget(
+                    Inspector::new(&selected_component.1).block(inspector_block),
+                    body_layout[2],
+                    inspector,
+                );
+            }
         }
         State::Disconnected => {
             frame.render_widget(Paragraph::new("Disconnected"), layout[1]);
@@ -327,6 +347,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                     components: Vec::new(),
                     components_list: PaginatedListState::default(),
                     components_thread_quitter: None,
+                    inspector: InspectorState::default(),
                 };
                 return Some(Message::SpawnComponnentsThread);
             }
