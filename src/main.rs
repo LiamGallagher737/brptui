@@ -21,8 +21,6 @@ const PRIMARY_COLOR: Color = Color::Rgb(37, 160, 101);
 struct Model {
     state: State,
     focus: Focus,
-    selected_indicies: [usize; 3],
-    max_indicies: [usize; 3],
     socket: SocketAddr,
 }
 
@@ -31,8 +29,6 @@ impl Default for Model {
         Self {
             state: Default::default(),
             focus: Default::default(),
-            selected_indicies: [0; 3],
-            max_indicies: [0; 3],
             socket: brp::DEFAULT_SOCKET,
         }
     }
