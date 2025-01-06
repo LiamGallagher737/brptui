@@ -1,4 +1,4 @@
-use bevy_remote::builtin_methods::BrpDestroyParams;
+use bevy_remote::builtin_methods::{BrpDestroyParams, BrpRemoveParams};
 use brp::{handle_components_querying, EntityMeta};
 use disqualified::ShortName;
 use inspector::{Inspector, InspectorState};
@@ -165,6 +165,8 @@ fn view(model: &mut Model, frame: &mut Frame) {
                     Focus::Entities | Focus::Components
                 )));
 
+            let components_block = Block::default().padding(Padding::horizontal(1));
+
             let inspector_block = Block::default()
                 .padding(Padding::left(1))
                 .borders(Borders::LEFT)
@@ -184,20 +186,29 @@ fn view(model: &mut Model, frame: &mut Frame) {
                 entities_list,
             );
 
-            frame.render_stateful_widget(
-                PaginatedList::new(
-                    components
-                        .iter()
-                        .map(|(name, _)| ShortName(name).to_string())
-                        .map(Span::raw)
-                        .map(Span::bold)
-                        .map(Line::from),
-                    model.focus == Focus::Components,
-                )
-                .block(Block::default().padding(Padding::horizontal(1))),
-                body_layout[1],
-                components_list,
-            );
+            if !components.is_empty() {
+                frame.render_stateful_widget(
+                    PaginatedList::new(
+                        components
+                            .iter()
+                            .map(|(name, _)| ShortName(name).to_string())
+                            .map(Span::raw)
+                            .map(Span::bold)
+                            .map(Line::from),
+                        model.focus == Focus::Components,
+                    )
+                    .block(components_block),
+                    body_layout[1],
+                    components_list,
+                );
+            } else {
+                frame.render_widget(
+                    Paragraph::new("Nothing to show")
+                        .bold()
+                        .block(components_block),
+                    body_layout[1],
+                );
+            }
 
             if let Some(selected_component) = components.get(components_list.selected()) {
                 frame.render_stateful_widget(
@@ -234,11 +245,15 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             Focus::Inspector => model.focus = Focus::Components,
             _ => {}
         },
-        Message::MoveRight => match model.focus {
-            Focus::Entities => model.focus = Focus::Components,
-            Focus::Components => model.focus = Focus::Inspector,
-            _ => {}
-        },
+        Message::MoveRight => {
+            if let State::Connected { components, .. } = &model.state {
+                match model.focus {
+                    Focus::Entities if !components.is_empty() => model.focus = Focus::Components,
+                    Focus::Components => model.focus = Focus::Inspector,
+                    _ => {}
+                }
+            }
+        }
         Message::MoveUp => match &mut model.state {
             State::Connected {
                 entities_list,
@@ -303,6 +318,8 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             if let State::Connected {
                 entities,
                 entities_list,
+                components,
+                components_list,
                 ..
             } = &mut model.state
             {
@@ -314,7 +331,19 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                             let _ = brp::destroy_request(&socket, BrpDestroyParams { entity });
                         });
                     }
-                    Focus::Components => todo!(),
+                    Focus::Components => {
+                        let entity = entities[entities_list.selected()].id;
+                        let (component, _) = components.remove(components_list.selected());
+                        thread::spawn(move || {
+                            let _ = brp::remove_request(
+                                &socket,
+                                BrpRemoveParams {
+                                    entity,
+                                    components: vec![component.to_owned()],
+                                },
+                            );
+                        });
+                    }
                     _ => {}
                 }
             }

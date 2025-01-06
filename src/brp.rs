@@ -4,7 +4,7 @@ use bevy_ecs::entity::Entity;
 use bevy_remote::{
     builtin_methods::{
         BrpDestroyParams, BrpGetParams, BrpGetResponse, BrpListParams, BrpListResponse, BrpQuery,
-        BrpQueryFilter, BrpQueryParams, BrpQueryResponse,
+        BrpQueryFilter, BrpQueryParams, BrpQueryResponse, BrpRemoveParams,
     },
     BrpPayload, BrpRequest,
 };
@@ -110,10 +110,12 @@ pub fn handle_components_querying(
             errors: _,
         }) = get_request(&socket, params.clone())
         {
-            tx.send(Message::UpdateComponents(components.into_iter().collect()))
-                .unwrap();
+            let mut components: Vec<_> = components.into_iter().collect();
+            components.sort_by(|a, b| a.0.cmp(&b.0));
+            tx.send(Message::UpdateComponents(components)).unwrap();
         } else {
-            tx.send(Message::CommunicationFailed).unwrap();
+            // We don't send a CommunicationFailed message here as it will trigger when the entity
+            // is deleted.
             return;
         }
 
@@ -149,6 +151,15 @@ pub fn destroy_request(socket: &SocketAddr, params: BrpDestroyParams) -> anyhow:
     request::<BrpDestroyParams, ()>(
         socket,
         bevy_remote::builtin_methods::BRP_DESTROY_METHOD,
+        params,
+    )
+}
+
+/// Post a `bevy/remove` request.
+pub fn remove_request(socket: &SocketAddr, params: BrpRemoveParams) -> anyhow::Result<()> {
+    request::<BrpRemoveParams, ()>(
+        socket,
+        bevy_remote::builtin_methods::BRP_REMOVE_METHOD,
         params,
     )
 }
