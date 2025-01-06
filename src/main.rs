@@ -1,3 +1,4 @@
+use bevy_remote::builtin_methods::BrpDestroyParams;
 use brp::EntityMeta;
 use keybinds::Keybinds;
 use paginated_list::{PaginatedList, PaginatedListState};
@@ -53,6 +54,7 @@ enum Message {
     MoveDown,
     PageUp,
     PageDown,
+    Delete,
     UpdateEntities(Vec<EntityMeta>),
     CommunicationFailed,
     Quit,
@@ -215,6 +217,25 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             } => entities_list.select_next_page(),
             _ => {}
         },
+        Message::Delete => {
+            if let State::Connected {
+                entities,
+                entities_list,
+            } = &mut model.state
+            {
+                let socket = model.socket;
+                match model.focus {
+                    Focus::Entities => {
+                        let entity = entities.remove(entities_list.selected()).id;
+                        thread::spawn(move || {
+                            let _ = brp::destroy_request(&socket, BrpDestroyParams { entity });
+                        });
+                    }
+                    Focus::Components => todo!(),
+                    _ => {}
+                }
+            }
+        }
         Message::UpdateEntities(new_entities) => match &mut model.state {
             State::Connected {
                 entities,

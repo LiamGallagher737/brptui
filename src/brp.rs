@@ -1,9 +1,10 @@
 use crate::Message;
+use anyhow::anyhow;
 use bevy_ecs::entity::Entity;
 use bevy_remote::{
     builtin_methods::{
-        BrpGetParams, BrpGetResponse, BrpListParams, BrpListResponse, BrpQuery, BrpQueryFilter,
-        BrpQueryParams, BrpQueryResponse,
+        BrpDestroyParams, BrpGetParams, BrpGetResponse, BrpListParams, BrpListResponse, BrpQuery,
+        BrpQueryFilter, BrpQueryParams, BrpQueryResponse,
     },
     BrpPayload, BrpRequest,
 };
@@ -58,7 +59,7 @@ pub fn handle_entity_querying(tx: mpsc::Sender<Message>, socket: &SocketAddr) {
         };
 
         if let Ok(response) = query_request(socket, params) {
-            let entities = response
+            let mut entities: Vec<_> = response
                 .iter()
                 .map(|row| EntityMeta {
                     id: row.entity,
@@ -69,6 +70,7 @@ pub fn handle_entity_querying(tx: mpsc::Sender<Message>, socket: &SocketAddr) {
                 })
                 .collect();
 
+            entities.sort_by_key(|e| e.id);
             tx.send(Message::UpdateEntities(entities)).unwrap();
         } else {
             tx.send(Message::CommunicationFailed).unwrap();
@@ -101,6 +103,15 @@ pub fn query_request(
     )
 }
 
+/// Post a `bevy/destroy` request.
+pub fn destroy_request(socket: &SocketAddr, params: BrpDestroyParams) -> anyhow::Result<()> {
+    request::<BrpDestroyParams, ()>(
+        socket,
+        bevy_remote::builtin_methods::BRP_DESTROY_METHOD,
+        params,
+    )
+}
+
 /// Post a `bevy/list` request.
 pub fn list_request(socket: &SocketAddr, params: BrpListParams) -> anyhow::Result<BrpListResponse> {
     request::<BrpListParams, BrpListResponse>(
@@ -128,7 +139,7 @@ fn request<Params: Serialize, Response: DeserializeOwned>(
 
     let body = match response.payload {
         BrpPayload::Result(value) => serde_json::from_value(value)?,
-        BrpPayload::Error(err) => panic!("{err:?}"),
+        BrpPayload::Error(err) => return Err(anyhow!("BrpPayload was an error: {err:?}")),
     };
 
     Ok(body)
