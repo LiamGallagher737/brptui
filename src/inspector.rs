@@ -10,6 +10,7 @@ use serde_json::{Map, Value};
 use crate::PRIMARY_COLOR;
 
 const INDENT_AMOUNT: u16 = 3;
+const LINE_HORIZONTAL: &str = "─";
 const LINE_VERTICAL: &str = "│";
 const LINE_JUNCTION: &str = "├";
 const LINE_START: &str = "┌";
@@ -104,12 +105,13 @@ impl StatefulWidget for Inspector<'_> {
 
                 let label_line = Line::from(vec![
                     Span::raw(format!(
-                        "{}{}─ ",
+                        "{}{}{LINE_HORIZONTAL} ",
                         (0..field.indent_level)
                             .flat_map(|_| [LINE_VERTICAL, "  "])
                             .collect::<String>(),
                         match next_indent {
                             Some(level) if level < field.indent_level => LINE_END,
+                            None if n == 0 => LINE_HORIZONTAL,
                             None => LINE_END,
                             _ if n == 0 => LINE_START,
                             _ => LINE_JUNCTION,
@@ -117,7 +119,7 @@ impl StatefulWidget for Inspector<'_> {
                     ))
                     .dim(),
                     Span::raw(&field.name).fg(color).bold(),
-                    Span::raw(": ").fg(color),
+                    Span::raw(": ").fg(color).bold(),
                 ]);
                 label_line.render(label_rect, buf);
 
