@@ -212,7 +212,8 @@ fn view(model: &mut Model, frame: &mut Frame) {
 
             if let Some(selected_component) = components.get(components_list.selected()) {
                 frame.render_stateful_widget(
-                    Inspector::new(&selected_component.1).block(inspector_block),
+                    Inspector::new(&selected_component.1, model.focus == Focus::Inspector)
+                        .block(inspector_block),
                     body_layout[2],
                     inspector,
                 );
@@ -259,6 +260,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             State::Connected {
                 entities_list,
                 components_list,
+                inspector,
                 ..
             } => match model.focus {
                 Focus::Entities => {
@@ -266,6 +268,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                     return Some(Message::SpawnComponnentsThread);
                 }
                 Focus::Components => components_list.select_previous(),
+                Focus::Inspector => inspector.select_previous(),
                 _ => {}
             },
             _ => {}
@@ -274,6 +277,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             State::Connected {
                 entities_list,
                 components_list,
+                inspector,
                 ..
             } => match model.focus {
                 Focus::Entities => {
@@ -281,6 +285,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                     return Some(Message::SpawnComponnentsThread);
                 }
                 Focus::Components => components_list.select_next(),
+                Focus::Inspector => inspector.select_next(),
                 _ => {}
             },
             _ => {}

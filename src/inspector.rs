@@ -1,11 +1,13 @@
 use disqualified::ShortName;
 use ratatui::{
     prelude::{BlockExt, Buffer, Rect},
-    style::Stylize,
+    style::{Color, Stylize},
     text::{Line, Span},
     widgets::{Block, StatefulWidget, Widget},
 };
 use serde_json::{Map, Value};
+
+use crate::PRIMARY_COLOR;
 
 const INDENT_AMOUNT: u16 = 3;
 const LINE_VERTICAL: &str = "│";
@@ -16,20 +18,21 @@ const LINE_END: &str = "└";
 pub struct Inspector<'a> {
     value: &'a Value,
     block: Option<Block<'a>>,
+    focused: bool,
 }
 
 impl<'a> Inspector<'a> {
-    pub fn new(value: &'a Value) -> Self {
-        Self { value, block: None }
+    pub fn new(value: &'a Value, focused: bool) -> Self {
+        Self {
+            value,
+            block: None,
+            focused,
+        }
     }
 
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
         self
-    }
-
-    fn is_single_value(&self) -> bool {
-        !matches!(self.value, Value::Object(_))
     }
 
     fn fields(&self) -> usize {
@@ -41,12 +44,24 @@ impl<'a> Inspector<'a> {
 }
 
 #[derive(Debug, Default)]
-pub struct InspectorState {}
+pub struct InspectorState {
+    selected: usize,
+}
+
+impl InspectorState {
+    pub fn select_previous(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    pub fn select_next(&mut self) {
+        self.selected += 1;
+    }
+}
 
 impl StatefulWidget for Inspector<'_> {
     type State = InspectorState;
 
-    fn render(self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         if let Some(block) = &self.block {
             block.render(area, buf);
         }
@@ -59,6 +74,7 @@ impl StatefulWidget for Inspector<'_> {
 
         if let Value::Object(map) = self.value {
             let flat_map = flatten_value_map(map, 0);
+            state.selected = state.selected.min(flat_map.len() - 1);
             for (n, field) in flat_map.iter().enumerate() {
                 let short_name = ShortName(&field.name).to_string();
                 let indent_chars = field.indent_level * INDENT_AMOUNT;
@@ -80,6 +96,12 @@ impl StatefulWidget for Inspector<'_> {
                     ..rect
                 };
 
+                let color = if n == state.selected && self.focused {
+                    PRIMARY_COLOR
+                } else {
+                    Color::Reset
+                };
+
                 let label_line = Line::from(vec![
                     Span::raw(format!(
                         "{}{}─ ",
@@ -96,14 +118,15 @@ impl StatefulWidget for Inspector<'_> {
                         },
                     ))
                     .dim(),
-                    Span::raw(&field.name).bold(),
-                    Span::raw(": "),
+                    Span::raw(&field.name).fg(color).bold(),
+                    Span::raw(": ").fg(color),
                 ]);
                 label_line.render(label_rect, buf);
 
                 InspectorValue(&field.value).render(value_rect, buf);
             }
         } else {
+            state.selected = 0;
             InspectorValue(self.value).render(area, buf)
         }
     }
