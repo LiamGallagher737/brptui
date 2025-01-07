@@ -168,7 +168,6 @@ fn view(model: &mut Model, frame: &mut Frame) {
             let components_block = Block::default().padding(Padding::horizontal(1));
 
             let inspector_block = Block::default()
-                .padding(Padding::left(1))
                 .borders(Borders::LEFT)
                 .border_type(BorderType::Thick)
                 .border_style(border_style(matches!(
@@ -249,6 +248,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             if let State::Connected { components, .. } = &model.state {
                 match model.focus {
                     Focus::Entities if !components.is_empty() => model.focus = Focus::Components,
+                    // TODO: Don't allow if component is zero sized.
                     Focus::Components => model.focus = Focus::Inspector,
                     _ => {}
                 }
