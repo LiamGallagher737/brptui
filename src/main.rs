@@ -168,6 +168,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
             let components_block = Block::default().padding(Padding::horizontal(1));
 
             let inspector_block = Block::default()
+                .padding(Padding::left(1))
                 .borders(Borders::LEFT)
                 .border_type(BorderType::Thick)
                 .border_style(border_style(matches!(

@@ -8,11 +8,10 @@ use ratatui::{
 use serde_json::{Map, Value};
 
 const INDENT_AMOUNT: u16 = 3;
-// Leading spaces should match above count minus one.
-const LINE_VERTICAL: &str = "  │";
-const LINE_JUNCTION: &str = "  ├";
-const LINE_START: &str = "  ┌";
-const LINE_END: &str = "  └";
+const LINE_VERTICAL: &str = "│";
+const LINE_JUNCTION: &str = "├";
+const LINE_START: &str = "┌";
+const LINE_END: &str = "└";
 
 pub struct Inspector<'a> {
     value: &'a Value,
@@ -72,7 +71,7 @@ impl StatefulWidget for Inspector<'_> {
                     y: area.y + n as u16,
                 };
                 let label_rect = Rect {
-                    width: indent_chars + short_name.len() as u16 + 7,
+                    width: indent_chars + short_name.len() as u16 + 5,
                     ..rect
                 };
                 let value_rect = Rect {
@@ -84,7 +83,11 @@ impl StatefulWidget for Inspector<'_> {
                 let label_line = Line::from(vec![
                     Span::raw(format!(
                         "{}{}─ ",
-                        LINE_VERTICAL.repeat(field.indent_level as usize),
+                        // LINE_VERTICAL.repeat(field.indent_level as usize),
+                        (0..field.indent_level)
+                            .map(|_| [LINE_VERTICAL, "  "])
+                            .flatten()
+                            .collect::<String>(),
                         match next_indent {
                             Some(level) if level < field.indent_level => LINE_END,
                             None => LINE_END,
