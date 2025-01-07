@@ -232,186 +232,168 @@ fn view(model: &mut Model, frame: &mut Frame) {
     frame.render_widget(keys, layout[2]);
 }
 
+macro_rules! handle_movement {
+    ($msg:expr, $state:expr, {
+        $($focus_pattern:pat => $list:ident $method:ident $(=> $after:expr)?),* $(,)?
+    }) => {
+        if let State::Connected { focus, $($list,)* .. } = $state {
+            match focus {
+                $(
+                    $focus_pattern => {
+                        $list.$method();
+                        $(return Some($after);)?
+                    }
+                )*
+                _ => {}
+            }
+        }
+    };
+}
+
 fn update(model: &mut Model, msg: Message) -> Option<Message> {
-    match msg {
-        Message::MoveLeft => {
-            if let State::Connected { focus, .. } = &mut model.state {
-                *focus = match *focus {
-                    Focus::Components => Focus::Entities,
-                    Focus::Inspector => Focus::Components,
-                    _ => *focus,
-                };
-            }
+    match (msg, &mut model.state) {
+        // Navigation between panels
+        (Message::MoveLeft, State::Connected { focus, .. }) => {
+            *focus = match *focus {
+                Focus::Components => Focus::Entities,
+                Focus::Inspector => Focus::Components,
+                _ => *focus,
+            };
         }
-        Message::MoveRight => {
-            if let State::Connected {
+
+        (
+            Message::MoveRight,
+            State::Connected {
                 focus, components, ..
-            } = &mut model.state
-            {
-                *focus = match *focus {
-                    Focus::Entities if !components.is_empty() => Focus::Components,
-                    // TODO: Don't allow if component is zero sized.
-                    Focus::Components => Focus::Inspector,
-                    _ => *focus,
-                };
-            }
+            },
+        ) => {
+            *focus = match *focus {
+                Focus::Entities if !components.is_empty() => Focus::Components,
+                Focus::Components => Focus::Inspector,
+                _ => *focus,
+            };
         }
-        Message::MoveUp => {
-            if let State::Connected {
-                focus,
-                entities_list,
-                components_list,
-                inspector,
-                ..
-            } = &mut model.state
-            {
-                match focus {
-                    Focus::Entities => {
-                        entities_list.select_previous();
-                        return Some(Message::SpawnComponnentsThread);
-                    }
-                    Focus::Components => components_list.select_previous(),
-                    Focus::Inspector => inspector.select_previous(),
-                    _ => {}
-                }
-            }
+
+        // Movement within panels
+        (Message::MoveUp, state) => {
+            handle_movement!(Message::MoveUp, state, {
+                Focus::Entities => entities_list select_previous => Message::SpawnComponnentsThread,
+                Focus::Components => components_list select_previous,
+                Focus::Inspector => inspector select_previous,
+            });
         }
-        Message::MoveDown => {
-            if let State::Connected {
-                focus,
-                entities_list,
-                components_list,
-                inspector,
-                ..
-            } = &mut model.state
-            {
-                match focus {
-                    Focus::Entities => {
-                        entities_list.select_next();
-                        return Some(Message::SpawnComponnentsThread);
-                    }
-                    Focus::Components => components_list.select_next(),
-                    Focus::Inspector => inspector.select_next(),
-                    _ => {}
-                }
-            }
+
+        (Message::MoveDown, state) => {
+            handle_movement!(Message::MoveDown, state, {
+                Focus::Entities => entities_list select_next => Message::SpawnComponnentsThread,
+                Focus::Components => components_list select_next,
+                Focus::Inspector => inspector select_next,
+            });
         }
-        Message::PageUp => {
-            if let State::Connected {
-                focus,
-                entities_list,
-                components_list,
-                ..
-            } = &mut model.state
-            {
-                match focus {
-                    Focus::Entities => {
-                        entities_list.select_previous_page();
-                        return Some(Message::SpawnComponnentsThread);
-                    }
-                    Focus::Components => components_list.select_previous_page(),
-                    _ => {}
-                }
-            }
+
+        (Message::PageUp, state) => {
+            handle_movement!(Message::PageUp, state, {
+                Focus::Entities => entities_list select_previous_page => Message::SpawnComponnentsThread,
+                Focus::Components => components_list select_previous_page,
+            });
         }
-        Message::PageDown => {
-            if let State::Connected {
-                focus,
-                entities_list,
-                components_list,
-                ..
-            } = &mut model.state
-            {
-                match focus {
-                    Focus::Entities => {
-                        entities_list.select_next_page();
-                        return Some(Message::SpawnComponnentsThread);
-                    }
-                    Focus::Components => components_list.select_next_page(),
-                    _ => {}
-                }
-            }
+
+        (Message::PageDown, state) => {
+            handle_movement!(Message::PageDown, state, {
+                Focus::Entities => entities_list select_next_page => Message::SpawnComponnentsThread,
+                Focus::Components => components_list select_next_page,
+            });
         }
-        Message::Delete => {
-            if let State::Connected {
+
+        // Deletion operations
+        (
+            Message::Delete,
+            State::Connected {
                 focus,
                 entities,
                 entities_list,
                 components,
                 components_list,
                 ..
-            } = &mut model.state
-            {
-                let socket = model.socket;
-                match focus {
-                    Focus::Entities => {
-                        let entity = entities.remove(entities_list.selected()).id;
-                        thread::spawn(move || {
-                            let _ = brp::destroy_request(&socket, BrpDestroyParams { entity });
-                        });
-                    }
-                    Focus::Components => {
-                        let entity = entities[entities_list.selected()].id;
-                        let (component, _) = components.remove(components_list.selected());
-                        thread::spawn(move || {
-                            let _ = brp::remove_request(
-                                &socket,
-                                BrpRemoveParams {
-                                    entity,
-                                    components: vec![component.to_owned()],
-                                },
-                            );
-                        });
-                    }
-                    _ => {}
+            },
+        ) => {
+            let socket = model.socket;
+            match focus {
+                Focus::Entities => {
+                    let entity = entities.remove(entities_list.selected()).id;
+                    thread::spawn(move || {
+                        let _ = brp::destroy_request(&socket, BrpDestroyParams { entity });
+                    });
                 }
+                Focus::Components => {
+                    let entity = entities[entities_list.selected()].id;
+                    let (component, _) = components.remove(components_list.selected());
+                    thread::spawn(move || {
+                        let _ = brp::remove_request(
+                            &socket,
+                            BrpRemoveParams {
+                                entity,
+                                components: vec![component.to_owned()],
+                            },
+                        );
+                    });
+                }
+                _ => {}
             }
         }
-        Message::SpawnComponnentsThread => {
-            if let State::Connected {
+
+        // Thread management
+        (
+            Message::SpawnComponnentsThread,
+            State::Connected {
                 entities,
                 entities_list,
                 components_thread_quitter,
                 ..
-            } = &mut model.state
-            {
-                if let Some(quitter) = components_thread_quitter {
-                    quitter.quit();
-                }
-                let tx = model.message_tx.clone();
-                let socket = model.socket;
-                let entity = entities[entities_list.selected()].id;
-                let quitter = ThreadQuitToken::new();
-                *components_thread_quitter = Some(quitter.clone());
-                thread::spawn(move || handle_components_querying(tx, &socket, entity, quitter));
+            },
+        ) => {
+            if let Some(quitter) = components_thread_quitter {
+                quitter.quit();
             }
+            let tx = model.message_tx.clone();
+            let socket = model.socket;
+            let entity = entities[entities_list.selected()].id;
+            let quitter = ThreadQuitToken::new();
+            *components_thread_quitter = Some(quitter.clone());
+            thread::spawn(move || handle_components_querying(tx, &socket, entity, quitter));
         }
-        Message::UpdateEntities(new_entities) => match &mut model.state {
-            State::Connected { entities, .. } => *entities = new_entities,
-            _ => {
-                model.state = State::Connected {
-                    focus: Focus::Entities,
-                    entities: new_entities,
-                    entities_list: PaginatedListState::default(),
-                    components: Vec::new(),
-                    components_list: PaginatedListState::default(),
-                    components_thread_quitter: None,
-                    inspector: InspectorState::default(),
-                };
-                return Some(Message::SpawnComponnentsThread);
-            }
-        },
-        Message::UpdateComponents(new_components) => {
-            if let State::Connected { components, .. } = &mut model.state {
-                *components = new_components;
-            }
+
+        // State updates
+        (Message::UpdateEntities(new_entities), State::Connected { entities, .. }) => {
+            *entities = new_entities;
         }
-        Message::CommunicationFailed => {
+        (Message::UpdateEntities(new_entities), _) => {
+            model.state = State::Connected {
+                focus: Focus::default(),
+                entities: new_entities,
+                entities_list: PaginatedListState::default(),
+                components: Vec::new(),
+                components_list: PaginatedListState::default(),
+                components_thread_quitter: None,
+                inspector: InspectorState::default(),
+            };
+            return Some(Message::SpawnComponnentsThread);
+        }
+
+        (Message::UpdateComponents(new_components), State::Connected { components, .. }) => {
+            *components = new_components;
+        }
+
+        // State transitions
+        (Message::CommunicationFailed, _) => {
             model.state = State::Disconnected;
         }
-        Message::Quit => {
+        (Message::Quit, _) => {
             model.state = State::Done;
         }
+
+        // Catch-all for unhandled combinations
+        _ => {}
     };
 
     None
