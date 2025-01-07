@@ -106,8 +106,7 @@ impl StatefulWidget for Inspector<'_> {
                     Span::raw(format!(
                         "{}{}─ ",
                         (0..field.indent_level)
-                            .map(|_| [LINE_VERTICAL, "  "])
-                            .flatten()
+                            .flat_map(|_| [LINE_VERTICAL, "  "])
                             .collect::<String>(),
                         match next_indent {
                             Some(level) if level < field.indent_level => LINE_END,

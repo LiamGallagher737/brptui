@@ -88,7 +88,7 @@ pub fn handle_components_querying(
     entity: Entity,
     quit: ThreadQuitToken,
 ) {
-    let Ok(components) = list_request(&socket, BrpListParams { entity }) else {
+    let Ok(components) = list_request(socket, BrpListParams { entity }) else {
         tx.send(Message::CommunicationFailed).unwrap();
         return;
     };
@@ -108,7 +108,7 @@ pub fn handle_components_querying(
         if let Ok(BrpGetResponse::Lenient {
             components,
             errors: _,
-        }) = get_request(&socket, params.clone())
+        }) = get_request(socket, params.clone())
         {
             let mut components: Vec<_> = components.into_iter().collect();
             components.sort_by(|a, b| a.0.cmp(&b.0));

@@ -256,70 +256,58 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                 }
             }
         }
-        Message::MoveUp => match &mut model.state {
-            State::Connected {
+        Message::MoveUp => if let State::Connected {
                 entities_list,
                 components_list,
                 inspector,
                 ..
-            } => match model.focus {
-                Focus::Entities => {
-                    entities_list.select_previous();
-                    return Some(Message::SpawnComponnentsThread);
-                }
-                Focus::Components => components_list.select_previous(),
-                Focus::Inspector => inspector.select_previous(),
-                _ => {}
-            },
+            } = &mut model.state { match model.focus {
+            Focus::Entities => {
+                entities_list.select_previous();
+                return Some(Message::SpawnComponnentsThread);
+            }
+            Focus::Components => components_list.select_previous(),
+            Focus::Inspector => inspector.select_previous(),
             _ => {}
-        },
-        Message::MoveDown => match &mut model.state {
-            State::Connected {
+        } },
+        Message::MoveDown => if let State::Connected {
                 entities_list,
                 components_list,
                 inspector,
                 ..
-            } => match model.focus {
-                Focus::Entities => {
-                    entities_list.select_next();
-                    return Some(Message::SpawnComponnentsThread);
-                }
-                Focus::Components => components_list.select_next(),
-                Focus::Inspector => inspector.select_next(),
-                _ => {}
-            },
+            } = &mut model.state { match model.focus {
+            Focus::Entities => {
+                entities_list.select_next();
+                return Some(Message::SpawnComponnentsThread);
+            }
+            Focus::Components => components_list.select_next(),
+            Focus::Inspector => inspector.select_next(),
             _ => {}
-        },
-        Message::PageUp => match &mut model.state {
-            State::Connected {
+        } },
+        Message::PageUp => if let State::Connected {
                 entities_list,
                 components_list,
                 ..
-            } => match model.focus {
-                Focus::Entities => {
-                    entities_list.select_previous_page();
-                    return Some(Message::SpawnComponnentsThread);
-                }
-                Focus::Components => components_list.select_previous_page(),
-                _ => {}
-            },
+            } = &mut model.state { match model.focus {
+            Focus::Entities => {
+                entities_list.select_previous_page();
+                return Some(Message::SpawnComponnentsThread);
+            }
+            Focus::Components => components_list.select_previous_page(),
             _ => {}
-        },
-        Message::PageDown => match &mut model.state {
-            State::Connected {
+        } },
+        Message::PageDown => if let State::Connected {
                 entities_list,
                 components_list,
                 ..
-            } => match model.focus {
-                Focus::Entities => {
-                    entities_list.select_next_page();
-                    return Some(Message::SpawnComponnentsThread);
-                }
-                Focus::Components => components_list.select_next_page(),
-                _ => {}
-            },
+            } = &mut model.state { match model.focus {
+            Focus::Entities => {
+                entities_list.select_next_page();
+                return Some(Message::SpawnComponnentsThread);
+            }
+            Focus::Components => components_list.select_next_page(),
             _ => {}
-        },
+        } },
         Message::Delete => {
             if let State::Connected {
                 entities,
