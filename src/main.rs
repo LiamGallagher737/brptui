@@ -274,6 +274,8 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             };
         }
 
+        (Message::MoveLeft | Message::MoveRight, _) => {}
+
         // Movement within panels
         (Message::MoveUp, state) => {
             handle_movement!(Message::MoveUp, state, {
@@ -341,6 +343,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                 _ => {}
             }
         }
+        (Message::Delete, _) => {}
 
         // Thread management
         (
@@ -362,6 +365,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             *components_thread_quitter = Some(quitter.clone());
             thread::spawn(move || handle_components_querying(tx, &socket, entity, quitter));
         }
+        (Message::SpawnComponnentsThread, _) => {}
 
         // State updates
         (Message::UpdateEntities(new_entities), State::Connected { entities, .. }) => {
@@ -383,6 +387,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         (Message::UpdateComponents(new_components), State::Connected { components, .. }) => {
             *components = new_components;
         }
+        (Message::UpdateComponents(_), _) => {}
 
         // State transitions
         (Message::CommunicationFailed, _) => {
@@ -391,9 +396,6 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         (Message::Quit, _) => {
             model.state = State::Done;
         }
-
-        // Catch-all for unhandled combinations
-        _ => {}
     };
 
     None
