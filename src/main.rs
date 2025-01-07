@@ -256,58 +256,78 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
                 }
             }
         }
-        Message::MoveUp => if let State::Connected {
+        Message::MoveUp => {
+            if let State::Connected {
                 entities_list,
                 components_list,
                 inspector,
                 ..
-            } = &mut model.state { match model.focus {
-            Focus::Entities => {
-                entities_list.select_previous();
-                return Some(Message::SpawnComponnentsThread);
+            } = &mut model.state
+            {
+                match model.focus {
+                    Focus::Entities => {
+                        entities_list.select_previous();
+                        return Some(Message::SpawnComponnentsThread);
+                    }
+                    Focus::Components => components_list.select_previous(),
+                    Focus::Inspector => inspector.select_previous(),
+                    _ => {}
+                }
             }
-            Focus::Components => components_list.select_previous(),
-            Focus::Inspector => inspector.select_previous(),
-            _ => {}
-        } },
-        Message::MoveDown => if let State::Connected {
+        }
+        Message::MoveDown => {
+            if let State::Connected {
                 entities_list,
                 components_list,
                 inspector,
                 ..
-            } = &mut model.state { match model.focus {
-            Focus::Entities => {
-                entities_list.select_next();
-                return Some(Message::SpawnComponnentsThread);
+            } = &mut model.state
+            {
+                match model.focus {
+                    Focus::Entities => {
+                        entities_list.select_next();
+                        return Some(Message::SpawnComponnentsThread);
+                    }
+                    Focus::Components => components_list.select_next(),
+                    Focus::Inspector => inspector.select_next(),
+                    _ => {}
+                }
             }
-            Focus::Components => components_list.select_next(),
-            Focus::Inspector => inspector.select_next(),
-            _ => {}
-        } },
-        Message::PageUp => if let State::Connected {
+        }
+        Message::PageUp => {
+            if let State::Connected {
                 entities_list,
                 components_list,
                 ..
-            } = &mut model.state { match model.focus {
-            Focus::Entities => {
-                entities_list.select_previous_page();
-                return Some(Message::SpawnComponnentsThread);
+            } = &mut model.state
+            {
+                match model.focus {
+                    Focus::Entities => {
+                        entities_list.select_previous_page();
+                        return Some(Message::SpawnComponnentsThread);
+                    }
+                    Focus::Components => components_list.select_previous_page(),
+                    _ => {}
+                }
             }
-            Focus::Components => components_list.select_previous_page(),
-            _ => {}
-        } },
-        Message::PageDown => if let State::Connected {
+        }
+        Message::PageDown => {
+            if let State::Connected {
                 entities_list,
                 components_list,
                 ..
-            } = &mut model.state { match model.focus {
-            Focus::Entities => {
-                entities_list.select_next_page();
-                return Some(Message::SpawnComponnentsThread);
+            } = &mut model.state
+            {
+                match model.focus {
+                    Focus::Entities => {
+                        entities_list.select_next_page();
+                        return Some(Message::SpawnComponnentsThread);
+                    }
+                    Focus::Components => components_list.select_next_page(),
+                    _ => {}
+                }
             }
-            Focus::Components => components_list.select_next_page(),
-            _ => {}
-        } },
+        }
         Message::Delete => {
             if let State::Connected {
                 entities,
