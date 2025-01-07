@@ -105,7 +105,6 @@ impl StatefulWidget for Inspector<'_> {
                 let label_line = Line::from(vec![
                     Span::raw(format!(
                         "{}{}─ ",
-                        // LINE_VERTICAL.repeat(field.indent_level as usize),
                         (0..field.indent_level)
                             .map(|_| [LINE_VERTICAL, "  "])
                             .flatten()
