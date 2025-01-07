@@ -32,7 +32,6 @@ const PRIMARY_COLOR: Color = Color::Rgb(37, 160, 101);
 #[derive(Debug)]
 struct Model {
     state: State,
-    focus: Focus,
     socket: SocketAddr,
     message_tx: mpsc::Sender<Message>,
 }
@@ -41,7 +40,6 @@ impl Model {
     fn new(message_tx: mpsc::Sender<Message>) -> Self {
         Self {
             state: Default::default(),
-            focus: Default::default(),
             socket: brp::DEFAULT_SOCKET,
             message_tx,
         }
@@ -51,6 +49,7 @@ impl Model {
 #[derive(Debug, Default)]
 enum State {
     Connected {
+        focus: Focus,
         entities: Vec<EntityMeta>,
         entities_list: PaginatedListState,
         components: Vec<(String, Value)>,
@@ -140,6 +139,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
     // Body
     match &mut model.state {
         State::Connected {
+            focus,
             entities,
             entities_list,
             components,
@@ -161,7 +161,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
                 .borders(Borders::RIGHT)
                 .border_type(BorderType::Thick)
                 .border_style(border_style(matches!(
-                    model.focus,
+                    focus,
                     Focus::Entities | Focus::Components
                 )));
 
@@ -172,14 +172,14 @@ fn view(model: &mut Model, frame: &mut Frame) {
                 .borders(Borders::LEFT)
                 .border_type(BorderType::Thick)
                 .border_style(border_style(matches!(
-                    model.focus,
+                    focus,
                     Focus::Components | Focus::Inspector
                 )));
 
             frame.render_stateful_widget(
                 PaginatedList::new(
                     entities.iter().map(EntityMeta::title),
-                    model.focus == Focus::Entities,
+                    *focus == Focus::Entities,
                 )
                 .block(entities_block),
                 body_layout[0],
@@ -195,7 +195,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
                             .map(Span::raw)
                             .map(Span::bold)
                             .map(Line::from),
-                        model.focus == Focus::Components,
+                        *focus == Focus::Components,
                     )
                     .block(components_block),
                     body_layout[1],
@@ -212,7 +212,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
 
             if let Some(selected_component) = components.get(components_list.selected()) {
                 frame.render_stateful_widget(
-                    Inspector::new(&selected_component.1, model.focus == Focus::Inspector)
+                    Inspector::new(&selected_component.1, *focus == Focus::Inspector)
                         .block(inspector_block),
                     body_layout[2],
                     inspector,
@@ -228,43 +228,44 @@ fn view(model: &mut Model, frame: &mut Frame) {
     // Footer
     let mut keys = Keybinds::default();
     keys.push("s", "search");
-    if model.focus == Focus::Entities {
-        keys.push("x", "despawn");
-    }
-    if model.focus == Focus::Components {
-        keys.push("x", "remove");
-    }
     keys.push("q", "quit");
     frame.render_widget(keys, layout[2]);
 }
 
 fn update(model: &mut Model, msg: Message) -> Option<Message> {
-    // Will be able to improve with https://github.com/rust-lang/rust/issues/51114
     match msg {
-        Message::MoveLeft => match model.focus {
-            Focus::Components => model.focus = Focus::Entities,
-            Focus::Inspector => model.focus = Focus::Components,
-            _ => {}
-        },
+        Message::MoveLeft => {
+            if let State::Connected { focus, .. } = &mut model.state {
+                *focus = match *focus {
+                    Focus::Components => Focus::Entities,
+                    Focus::Inspector => Focus::Components,
+                    _ => *focus,
+                };
+            }
+        }
         Message::MoveRight => {
-            if let State::Connected { components, .. } = &model.state {
-                match model.focus {
-                    Focus::Entities if !components.is_empty() => model.focus = Focus::Components,
+            if let State::Connected {
+                focus, components, ..
+            } = &mut model.state
+            {
+                *focus = match *focus {
+                    Focus::Entities if !components.is_empty() => Focus::Components,
                     // TODO: Don't allow if component is zero sized.
-                    Focus::Components => model.focus = Focus::Inspector,
-                    _ => {}
-                }
+                    Focus::Components => Focus::Inspector,
+                    _ => *focus,
+                };
             }
         }
         Message::MoveUp => {
             if let State::Connected {
+                focus,
                 entities_list,
                 components_list,
                 inspector,
                 ..
             } = &mut model.state
             {
-                match model.focus {
+                match focus {
                     Focus::Entities => {
                         entities_list.select_previous();
                         return Some(Message::SpawnComponnentsThread);
@@ -277,13 +278,14 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         }
         Message::MoveDown => {
             if let State::Connected {
+                focus,
                 entities_list,
                 components_list,
                 inspector,
                 ..
             } = &mut model.state
             {
-                match model.focus {
+                match focus {
                     Focus::Entities => {
                         entities_list.select_next();
                         return Some(Message::SpawnComponnentsThread);
@@ -296,12 +298,13 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         }
         Message::PageUp => {
             if let State::Connected {
+                focus,
                 entities_list,
                 components_list,
                 ..
             } = &mut model.state
             {
-                match model.focus {
+                match focus {
                     Focus::Entities => {
                         entities_list.select_previous_page();
                         return Some(Message::SpawnComponnentsThread);
@@ -313,12 +316,13 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         }
         Message::PageDown => {
             if let State::Connected {
+                focus,
                 entities_list,
                 components_list,
                 ..
             } = &mut model.state
             {
-                match model.focus {
+                match focus {
                     Focus::Entities => {
                         entities_list.select_next_page();
                         return Some(Message::SpawnComponnentsThread);
@@ -330,6 +334,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         }
         Message::Delete => {
             if let State::Connected {
+                focus,
                 entities,
                 entities_list,
                 components,
@@ -338,7 +343,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             } = &mut model.state
             {
                 let socket = model.socket;
-                match model.focus {
+                match focus {
                     Focus::Entities => {
                         let entity = entities.remove(entities_list.selected()).id;
                         thread::spawn(move || {
@@ -385,6 +390,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             State::Connected { entities, .. } => *entities = new_entities,
             _ => {
                 model.state = State::Connected {
+                    focus: Focus::Entities,
                     entities: new_entities,
                     entities_list: PaginatedListState::default(),
                     components: Vec::new(),
