@@ -1,6 +1,3 @@
-use std::ops::Add;
-
-use disqualified::ShortName;
 use ratatui::{
     prelude::{BlockExt, Buffer, Rect},
     style::{Color, Stylize},
@@ -29,7 +26,12 @@ impl<'a> Inspector<'a> {
         state.value_types = match value {
             Value::Object(map) => flatten_value_map(map, 0)
                 .iter()
-                .map(|f| ValueType::from(&f.value))
+                .filter_map(|line| match line {
+                    InspecotorLine::ObjectStart { .. } => Some(ValueType::Object),
+                    InspecotorLine::ObjectField { value, .. } => Some(ValueType::from(value)),
+                    InspecotorLine::ArrayStart { value_type, .. } => Some(*value_type),
+                    _ => None,
+                })
                 .collect(),
             _ => vec![ValueType::from(value)],
         };
@@ -57,6 +59,7 @@ impl<'a> Inspector<'a> {
 #[derive(Debug, Default)]
 pub struct InspectorState {
     selected: usize,
+    selected_array_item: Option<usize>,
     value_types: Vec<ValueType>,
 }
 
@@ -67,6 +70,7 @@ pub enum ValueType {
     Number,
     String,
     Array,
+    Object,
 }
 
 impl InspectorState {
@@ -75,7 +79,7 @@ impl InspectorState {
     }
 
     pub fn select_next(&mut self) {
-        self.selected = self.selected.add(1).min(self.value_types.len() - 1);
+        self.selected = (self.selected + 1).min(self.value_types.len() - 1);
     }
 
     pub fn selected_value_type(&self) -> ValueType {
@@ -100,54 +104,147 @@ impl StatefulWidget for Inspector<'_> {
         if let Value::Object(map) = self.value {
             let flat_map = flatten_value_map(map, 0);
             state.selected = state.selected.min(flat_map.len() - 1);
-            for (n, field) in flat_map.iter().enumerate() {
-                let short_name = ShortName(&field.name).to_string();
-                let indent_chars = field.indent_level * INDENT_AMOUNT;
-                let next_indent = flat_map.get(n + 1).map(|f| f.indent_level);
-
+            let mut field_index = 0;
+            for (y, line) in flat_map.iter().enumerate() {
                 let rect = Rect {
                     height: 1,
                     width: area.width,
                     x: area.x,
-                    y: area.y + n as u16,
-                };
-                let label_rect = Rect {
-                    width: indent_chars + short_name.len() as u16 + 5,
-                    ..rect
-                };
-                let value_rect = Rect {
-                    width: rect.width - label_rect.width,
-                    x: rect.x + label_rect.width,
-                    ..rect
+                    y: area.y + y as u16,
                 };
 
-                let color = if n == state.selected && self.focused {
-                    PRIMARY_COLOR
-                } else {
-                    Color::Reset
-                };
+                let next_field = flat_map[field_index..].iter().find_map(|i| match i {
+                    InspecotorLine::ObjectField { indent_level, .. } => Some(indent_level),
+                    InspecotorLine::ArrayStart { indent_level, .. } => Some(indent_level),
+                    _ => None,
+                });
 
-                let label_line = Line::from(vec![
-                    Span::raw(format!(
-                        "{}{}{LINE_HORIZONTAL} ",
-                        (0..field.indent_level)
-                            .flat_map(|_| [LINE_VERTICAL, "  "])
-                            .collect::<String>(),
-                        match next_indent {
-                            Some(level) if level < field.indent_level => LINE_END,
-                            None if n == 0 => LINE_HORIZONTAL,
-                            None => LINE_END,
-                            _ if n == 0 => LINE_START,
-                            _ => LINE_JUNCTION,
-                        },
-                    ))
-                    .dim(),
-                    Span::raw(&field.name).fg(color).bold(),
-                    Span::raw(": ").fg(color).bold(),
-                ]);
-                label_line.render(label_rect, buf);
+                match line {
+                    InspecotorLine::ObjectField {
+                        name,
+                        value,
+                        indent_level,
+                    } => {
+                        let indent_chars = indent_level * INDENT_AMOUNT;
 
-                InspectorValue(&field.value).render(value_rect, buf);
+                        let label_rect = Rect {
+                            width: indent_chars + name.len() as u16 + 5,
+                            ..rect
+                        };
+                        let value_rect = Rect {
+                            width: rect.width - label_rect.width,
+                            x: rect.x + label_rect.width,
+                            ..rect
+                        };
+
+                        let color = if field_index == state.selected && self.focused {
+                            PRIMARY_COLOR
+                        } else {
+                            Color::Reset
+                        };
+
+                        let label_line = Line::from(vec![
+                            Span::raw(format!(
+                                "{}{}{LINE_HORIZONTAL} ",
+                                (0..*indent_level)
+                                    .flat_map(|_| [LINE_VERTICAL, "  "])
+                                    .collect::<String>(),
+                                match flat_map.get(y + 1) {
+                                    Some(InspecotorLine::ObjectField {
+                                        indent_level: i, ..
+                                    }) if indent_level == i => LINE_JUNCTION,
+                                    Some(
+                                        InspecotorLine::ObjectStart { .. }
+                                        | InspecotorLine::ArrayStart { .. },
+                                    ) => LINE_JUNCTION,
+                                    Some(InspecotorLine::ObjectEnd { .. }) => LINE_END,
+                                    _ => "X",
+                                },
+                            ))
+                            .dim(),
+                            Span::raw(name).fg(color).bold(),
+                            Span::raw(": ").fg(color).bold(),
+                        ]);
+                        label_line.render(label_rect, buf);
+
+                        InspectorValue(&value).render(value_rect, buf);
+                        field_index += 1;
+                    }
+                    InspecotorLine::ArrayStart {
+                        name, indent_level, ..
+                    }
+                    | InspecotorLine::ObjectStart { name, indent_level } => {
+                        let color = if field_index == state.selected && self.focused {
+                            PRIMARY_COLOR
+                        } else {
+                            Color::Reset
+                        };
+
+                        let c = match line {
+                            InspecotorLine::ObjectStart { .. } => "{",
+                            InspecotorLine::ArrayStart { .. } => "[",
+                            _ => unreachable!(),
+                        };
+
+                        let label_line = Line::from(vec![
+                            Span::raw(format!(
+                                "{}{}{LINE_HORIZONTAL} ",
+                                (0..*indent_level)
+                                    .flat_map(|_| [LINE_VERTICAL, "  "])
+                                    .collect::<String>(),
+                                match next_field {
+                                    Some(level) if level < indent_level => LINE_END,
+                                    None if y == 0 => LINE_HORIZONTAL,
+                                    None => LINE_END,
+                                    _ if y == 0 => LINE_START,
+                                    _ => LINE_JUNCTION,
+                                },
+                            ))
+                            .dim(),
+                            Span::raw(name).fg(color).bold(),
+                            Span::raw(": ").fg(color).bold(),
+                            Span::raw(c).bold(),
+                        ]);
+                        label_line.render(rect, buf);
+
+                        field_index += 1;
+                    }
+                    InspecotorLine::ArrayItem {
+                        value,
+                        indent_level,
+                    } => {
+                        let label_line = Line::from(vec![
+                            Span::raw(format!(
+                                "{}   ",
+                                (0..*indent_level + 1)
+                                    .flat_map(|_| [LINE_VERTICAL, "  "])
+                                    .collect::<String>(),
+                            ))
+                            .dim(),
+                            Span::raw(value.to_string()),
+                        ]);
+                        label_line.render(rect, buf);
+                    }
+                    InspecotorLine::ArrayEnd { indent_level }
+                    | InspecotorLine::ObjectEnd { indent_level } => {
+                        let c = match line {
+                            InspecotorLine::ObjectEnd { .. } => "}",
+                            InspecotorLine::ArrayEnd { .. } => "]",
+                            _ => unreachable!(),
+                        };
+                        let label_line = Line::from(vec![
+                            Span::raw(format!(
+                                "{}",
+                                (0..*indent_level + 1)
+                                    .flat_map(|_| [LINE_VERTICAL, "  "])
+                                    .collect::<String>(),
+                            ))
+                            .dim(),
+                            Span::raw(c).bold(),
+                        ]);
+                        label_line.render(rect, buf);
+                    }
+                }
             }
         } else {
             state.selected = 0;
@@ -172,18 +269,61 @@ impl Widget for InspectorValue<'_> {
     }
 }
 
-struct Field {
-    name: String,
-    value: Value,
-    indent_level: u16,
+#[derive(Debug)]
+enum InspecotorLine {
+    ObjectStart {
+        name: String,
+        indent_level: u16,
+    },
+    ObjectField {
+        name: String,
+        value: Value,
+        indent_level: u16,
+    },
+    ObjectEnd {
+        indent_level: u16,
+    },
+    ArrayStart {
+        name: String,
+        indent_level: u16,
+        value_type: ValueType,
+    },
+    ArrayItem {
+        value: Value,
+        indent_level: u16,
+    },
+    ArrayEnd {
+        indent_level: u16,
+    },
 }
 
-fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<Field> {
+fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<InspecotorLine> {
     let mut vec = Vec::new();
     for (name, value) in map {
         match value {
-            Value::Object(map) => vec.append(&mut flatten_value_map(map, indent_level + 1)),
-            _ => vec.push(Field {
+            Value::Object(map) => {
+                vec.push(InspecotorLine::ObjectStart {
+                    name: name.to_owned(),
+                    indent_level,
+                });
+                vec.append(&mut flatten_value_map(map, indent_level + 1));
+                vec.push(InspecotorLine::ObjectEnd { indent_level });
+            }
+            Value::Array(items) => {
+                vec.push(InspecotorLine::ArrayStart {
+                    name: name.to_owned(),
+                    indent_level,
+                    value_type: ValueType::from(value),
+                });
+                for item in items {
+                    vec.push(InspecotorLine::ArrayItem {
+                        value: item.to_owned(),
+                        indent_level,
+                    });
+                }
+                vec.push(InspecotorLine::ArrayEnd { indent_level });
+            }
+            _ => vec.push(InspecotorLine::ObjectField {
                 name: name.to_owned(),
                 value: value.to_owned(),
                 indent_level,
@@ -201,7 +341,7 @@ impl From<&Value> for ValueType {
             Value::Number(_) => Self::Number,
             Value::String(_) => Self::String,
             Value::Array(_) => Self::Array,
-            Value::Object(_) => panic!("`ValueType` does not allow `Object`"),
+            Value::Object(_) => Self::Object,
         }
     }
 }
