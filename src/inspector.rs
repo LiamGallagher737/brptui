@@ -80,7 +80,7 @@ impl InspectorState {
                 .iter()
                 .filter_map(|line| match line {
                     InspecotorLine::ObjectStart { .. } => Some(ValueType::Object),
-                    InspecotorLine::ObjectField { value, .. } => Some(ValueType::from(value)),
+                    InspecotorLine::ObjectField { value, .. } => Some(ValueType::from(*value)),
                     InspecotorLine::ArrayStart { value_type, .. } => Some(*value_type),
                     _ => None,
                 })
@@ -202,7 +202,7 @@ impl StatefulWidget for Inspector<'_> {
                                 },
                             ))
                             .dim(),
-                            Span::raw(name).fg(color).bold(),
+                            Span::raw(*name).fg(color).bold(),
                             Span::raw(": ").fg(color).bold(),
                         ]);
                         label_line.render(label_rect, buf);
@@ -244,7 +244,7 @@ impl StatefulWidget for Inspector<'_> {
                             .dim(),
                         );
                         if let Some(name) = name {
-                            spans.push(Span::raw(name).fg(color).bold());
+                            spans.push(Span::raw(*name).fg(color).bold());
                             spans.push(Span::raw(": ").fg(color).bold());
                         }
                         spans.push(Span::raw(c).bold());
@@ -313,26 +313,26 @@ impl Widget for InspectorValue<'_> {
 }
 
 #[derive(Debug)]
-enum InspecotorLine {
+enum InspecotorLine<'a> {
     ObjectStart {
-        name: Option<String>,
+        name: Option<&'a str>,
         indent_level: u16,
     },
     ObjectField {
-        name: String,
-        value: Value,
+        name: &'a str,
+        value: &'a Value,
         indent_level: u16,
     },
     ObjectEnd {
         indent_level: u16,
     },
     ArrayStart {
-        name: Option<String>,
+        name: Option<&'a str>,
         indent_level: u16,
         value_type: ValueType,
     },
     ArrayItem {
-        value: Value,
+        value: &'a Value,
         indent_level: u16,
     },
     ArrayEnd {
@@ -346,7 +346,7 @@ fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<Inspeco
         match value {
             Value::Object(map) => {
                 vec.push(InspecotorLine::ObjectStart {
-                    name: Some(name.to_owned()),
+                    name: Some(name),
                     indent_level,
                 });
                 vec.append(&mut flatten_value_map(map, indent_level + 1));
@@ -354,21 +354,21 @@ fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<Inspeco
             }
             Value::Array(items) => {
                 vec.push(InspecotorLine::ArrayStart {
-                    name: Some(name.to_owned()),
+                    name: Some(name),
                     indent_level,
                     value_type: ValueType::from(value),
                 });
-                for item in items {
+                for value in items {
                     vec.push(InspecotorLine::ArrayItem {
-                        value: item.to_owned(),
+                        value,
                         indent_level,
                     });
                 }
                 vec.push(InspecotorLine::ArrayEnd { indent_level });
             }
             _ => vec.push(InspecotorLine::ObjectField {
-                name: name.to_owned(),
-                value: value.to_owned(),
+                name,
+                value,
                 indent_level,
             }),
         }
