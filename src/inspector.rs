@@ -352,20 +352,7 @@ fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<Inspeco
                 vec.append(&mut flatten_value_map(map, indent_level + 1));
                 vec.push(InspecotorLine::ObjectEnd { indent_level });
             }
-            Value::Array(items) => {
-                vec.push(InspecotorLine::ArrayStart {
-                    name: Some(name),
-                    indent_level,
-                    value_type: ValueType::from(value),
-                });
-                for value in items {
-                    vec.push(InspecotorLine::ArrayItem {
-                        value,
-                        indent_level,
-                    });
-                }
-                vec.push(InspecotorLine::ArrayEnd { indent_level });
-            }
+            Value::Array(array) => vec.append(&mut flatten_array(Some(name), array, indent_level)),
             _ => vec.push(InspecotorLine::ObjectField {
                 name,
                 value,
@@ -373,6 +360,31 @@ fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<Inspeco
             }),
         }
     }
+    vec
+}
+
+fn flatten_array<'a>(
+    name: Option<&'a str>,
+    array: &'a Vec<Value>,
+    indent_level: u16,
+) -> Vec<InspecotorLine<'a>> {
+    let mut vec = Vec::new();
+    vec.push(InspecotorLine::ArrayStart {
+        name: name,
+        indent_level,
+        value_type: ValueType::Array,
+    });
+    for value in array {
+        match value {
+            Value::Object(map) => vec.append(&mut flatten_value_map(map, indent_level + 1)),
+            Value::Array(array) => vec.append(&mut flatten_array(None, array, indent_level + 1)),
+            value => vec.push(InspecotorLine::ArrayItem {
+                value,
+                indent_level,
+            }),
+        }
+    }
+    vec.push(InspecotorLine::ArrayEnd { indent_level });
     vec
 }
 
