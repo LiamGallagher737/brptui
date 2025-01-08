@@ -2,7 +2,7 @@ use bevy_remote::builtin_methods::{BrpDestroyParams, BrpRemoveParams};
 use brp::{handle_components_querying, EntityMeta};
 use disqualified::ShortName;
 use inspector::{Inspector, InspectorState};
-use keybinds::Keybinds;
+use keybinds::{KeybindDisplay, KeybindSet};
 use paginated_list::{PaginatedList, PaginatedListState};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -29,19 +29,20 @@ mod paginated_list;
 
 const PRIMARY_COLOR: Color = Color::Rgb(37, 160, 101);
 
-#[derive(Debug)]
 struct Model {
     state: State,
     socket: SocketAddr,
     message_tx: mpsc::Sender<Message>,
+    keybinds: KeybindSet,
 }
 
 impl Model {
-    fn new(message_tx: mpsc::Sender<Message>) -> Self {
+    fn new(message_tx: mpsc::Sender<Message>, keybinds: KeybindSet) -> Self {
         Self {
             state: Default::default(),
             socket: brp::DEFAULT_SOCKET,
             message_tx,
+            keybinds,
         }
     }
 }
@@ -95,8 +96,18 @@ enum Focus {
 fn main() -> std::io::Result<()> {
     let mut terminal = ratatui::init();
 
+    // Keybinds will be displayed in the order they are added
+    let mut keybinds = KeybindSet::new();
+    keybinds
+        .always("s", "search")
+        .when_focus("x", "despawn", [Focus::Entities])
+        .when_focus("x", "remove", [Focus::Components])
+        .when_focus("[]", "move page", [Focus::Entities, Focus::Components])
+        .when_connected("hjkl/←↓↑→", "move")
+        .always("q", "quit");
+
     let (tx, rx) = mpsc::channel();
-    let mut model = Model::new(tx.clone());
+    let mut model = Model::new(tx.clone(), keybinds);
 
     // Spawn crossterm event handler thread.
     let events_tx = tx.clone();
@@ -226,10 +237,8 @@ fn view(model: &mut Model, frame: &mut Frame) {
     }
 
     // Footer
-    let mut keys = Keybinds::default();
-    keys.push("s", "search");
-    keys.push("q", "quit");
-    frame.render_widget(keys, layout[2]);
+    let active_keybinds = model.keybinds.active_keybinds(&model.state);
+    frame.render_widget(KeybindDisplay(&active_keybinds[..]), layout[2]);
 }
 
 macro_rules! handle_movement {
