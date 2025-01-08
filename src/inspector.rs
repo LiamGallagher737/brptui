@@ -306,7 +306,7 @@ impl Widget for InspectorValue<'_> {
             Value::Bool(value) => Line::raw(value.to_string()),
             Value::Number(value) => Line::raw(value.to_string()),
             Value::String(value) => Line::raw(value),
-            _ => panic!("Invalid value type"),
+            _ => Line::raw("TODO"),
         };
         line.render(area, buf);
     }
@@ -376,7 +376,16 @@ fn flatten_array<'a>(
     });
     for value in array {
         match value {
-            Value::Object(map) => vec.append(&mut flatten_value_map(map, indent_level + 1)),
+            Value::Object(map) => {
+                vec.push(InspecotorLine::ObjectStart {
+                    name: None,
+                    indent_level: indent_level + 1,
+                });
+                vec.append(&mut flatten_value_map(map, indent_level + 2));
+                vec.push(InspecotorLine::ObjectEnd {
+                    indent_level: indent_level + 1,
+                });
+            }
             Value::Array(array) => vec.append(&mut flatten_array(None, array, indent_level + 1)),
             value => vec.push(InspecotorLine::ArrayItem {
                 value,
