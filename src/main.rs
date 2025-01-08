@@ -224,8 +224,9 @@ fn view(model: &mut Model, frame: &mut Frame) {
             }
 
             if let Some(selected_component) = components.get(components_list.selected()) {
+                inspector.update_value_types(&selected_component.1);
                 frame.render_stateful_widget(
-                    Inspector::new(&selected_component.1, *focus == Focus::Inspector, inspector)
+                    Inspector::new(&selected_component.1, *focus == Focus::Inspector)
                         .block(inspector_block),
                     body_layout[2],
                     inspector,

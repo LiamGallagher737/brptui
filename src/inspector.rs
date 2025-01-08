@@ -22,20 +22,7 @@ pub struct Inspector<'a> {
 }
 
 impl<'a> Inspector<'a> {
-    pub fn new(value: &'a Value, focused: bool, state: &mut InspectorState) -> Self {
-        state.value_types = match value {
-            Value::Object(map) => flatten_value_map(map, 0)
-                .iter()
-                .filter_map(|line| match line {
-                    InspecotorLine::ObjectStart { .. } => Some(ValueType::Object),
-                    InspecotorLine::ObjectField { value, .. } => Some(ValueType::from(value)),
-                    InspecotorLine::ArrayStart { value_type, .. } => Some(*value_type),
-                    _ => None,
-                })
-                .collect(),
-            _ => vec![ValueType::from(value)],
-        };
-
+    pub fn new(value: &'a Value, focused: bool) -> Self {
         Self {
             value,
             block: None,
@@ -86,6 +73,21 @@ impl InspectorState {
     pub fn selected_value_type(&self) -> ValueType {
         self.value_types[self.selected]
     }
+
+    pub fn update_value_types(&mut self, value: &Value) {
+        self.value_types = match value {
+            Value::Object(map) => flatten_value_map(map, 0)
+                .iter()
+                .filter_map(|line| match line {
+                    InspecotorLine::ObjectStart { .. } => Some(ValueType::Object),
+                    InspecotorLine::ObjectField { value, .. } => Some(ValueType::from(value)),
+                    InspecotorLine::ArrayStart { value_type, .. } => Some(*value_type),
+                    _ => None,
+                })
+                .collect(),
+            _ => vec![ValueType::from(value)],
+        };
+    }
 }
 
 impl StatefulWidget for Inspector<'_> {
@@ -124,6 +126,7 @@ impl StatefulWidget for Inspector<'_> {
             if selected_y > state.scroll + area.height.saturating_sub(6) as usize {
                 state.scroll += 1;
             }
+            state.scroll = state.scroll.min(flat_map.len().saturating_sub(area.height as usize));
             let upper_limit = (state.scroll + area.height as usize).min(flat_map.len());
 
             state.selected = state.selected.min(flat_map.len() - 1);
@@ -193,7 +196,7 @@ impl StatefulWidget for Inspector<'_> {
                                     ) => LINE_JUNCTION,
                                     Some(InspecotorLine::ObjectEnd { .. }) => LINE_END,
                                     None => LINE_END,
-                                    _ => "X"
+                                    _ => "X",
                                 },
                             ))
                             .dim(),
