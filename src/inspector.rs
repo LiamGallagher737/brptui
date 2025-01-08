@@ -61,6 +61,7 @@ pub struct InspectorState {
     selected: usize,
     selected_array_item: Option<usize>,
     value_types: Vec<ValueType>,
+    scroll: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,9 +104,41 @@ impl StatefulWidget for Inspector<'_> {
 
         if let Value::Object(map) = self.value {
             let flat_map = flatten_value_map(map, 0);
+            let selected_y = flat_map
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| {
+                    matches!(
+                        l,
+                        InspecotorLine::ObjectStart { .. }
+                            | InspecotorLine::ArrayStart { .. }
+                            | InspecotorLine::ObjectField { .. }
+                    )
+                })
+                .nth(state.selected)
+                .map(|(y, _)| y)
+                .unwrap_or_default();
+            if selected_y < state.scroll + 6 {
+                state.scroll = state.scroll.saturating_sub(1);
+            }
+            if selected_y > state.scroll + area.height.saturating_sub(6) as usize {
+                state.scroll += 1;
+            }
+            let upper_limit = (state.scroll + area.height as usize).min(flat_map.len());
+
             state.selected = state.selected.min(flat_map.len() - 1);
-            let mut field_index = 0;
-            for (y, line) in flat_map.iter().enumerate() {
+            let mut field_index = flat_map[0..state.scroll]
+                .iter()
+                .filter(|l| {
+                    matches!(
+                        l,
+                        InspecotorLine::ObjectStart { .. }
+                            | InspecotorLine::ArrayStart { .. }
+                            | InspecotorLine::ObjectField { .. }
+                    )
+                })
+                .count();
+            for (y, line) in flat_map[state.scroll..upper_limit].iter().enumerate() {
                 let rect = Rect {
                     height: 1,
                     width: area.width,
@@ -149,7 +182,8 @@ impl StatefulWidget for Inspector<'_> {
                                 (0..*indent_level)
                                     .flat_map(|_| [LINE_VERTICAL, "  "])
                                     .collect::<String>(),
-                                match flat_map.get(y + 1) {
+                                match flat_map.get(y + 1 + state.scroll) {
+                                    _ if y == 0 => LINE_START,
                                     Some(InspecotorLine::ObjectField {
                                         indent_level: i, ..
                                     }) if indent_level == i => LINE_JUNCTION,
@@ -158,7 +192,8 @@ impl StatefulWidget for Inspector<'_> {
                                         | InspecotorLine::ArrayStart { .. },
                                     ) => LINE_JUNCTION,
                                     Some(InspecotorLine::ObjectEnd { .. }) => LINE_END,
-                                    _ => "X",
+                                    None => LINE_END,
+                                    _ => "X"
                                 },
                             ))
                             .dim(),
@@ -193,10 +228,10 @@ impl StatefulWidget for Inspector<'_> {
                                     .flat_map(|_| [LINE_VERTICAL, "  "])
                                     .collect::<String>(),
                                 match next_field {
+                                    _ if y == 0 => LINE_START,
                                     Some(level) if level < indent_level => LINE_END,
                                     None if y == 0 => LINE_HORIZONTAL,
                                     None => LINE_END,
-                                    _ if y == 0 => LINE_START,
                                     _ => LINE_JUNCTION,
                                 },
                             ))
@@ -262,7 +297,6 @@ impl Widget for InspectorValue<'_> {
             Value::Bool(value) => Line::raw(value.to_string()),
             Value::Number(value) => Line::raw(value.to_string()),
             Value::String(value) => Line::raw(value),
-            Value::Array(_value) => Line::raw("Array (TODO)"),
             _ => panic!("Invalid value type"),
         };
         line.render(area, buf);
