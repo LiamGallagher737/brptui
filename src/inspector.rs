@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use disqualified::ShortName;
 use ratatui::{
     prelude::{BlockExt, Buffer, Rect},
@@ -23,7 +25,15 @@ pub struct Inspector<'a> {
 }
 
 impl<'a> Inspector<'a> {
-    pub fn new(value: &'a Value, focused: bool) -> Self {
+    pub fn new(value: &'a Value, focused: bool, state: &mut InspectorState) -> Self {
+        state.value_types = match value {
+            Value::Object(map) => flatten_value_map(map, 0)
+                .iter()
+                .map(|f| ValueType::from(&f.value))
+                .collect(),
+            _ => vec![ValueType::from(value)],
+        };
+
         Self {
             value,
             block: None,
@@ -47,6 +57,16 @@ impl<'a> Inspector<'a> {
 #[derive(Debug, Default)]
 pub struct InspectorState {
     selected: usize,
+    value_types: Vec<ValueType>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueType {
+    Null,
+    Bool,
+    Number,
+    String,
+    Array,
 }
 
 impl InspectorState {
@@ -55,7 +75,11 @@ impl InspectorState {
     }
 
     pub fn select_next(&mut self) {
-        self.selected += 1;
+        self.selected = self.selected.add(1).min(self.value_types.len() - 1);
+    }
+
+    pub fn selected_value_type(&self) -> ValueType {
+        self.value_types[self.selected]
     }
 }
 
@@ -167,4 +191,17 @@ fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<Field> 
         }
     }
     vec
+}
+
+impl From<&Value> for ValueType {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::Null => Self::Null,
+            Value::Bool(_) => Self::Bool,
+            Value::Number(_) => Self::Number,
+            Value::String(_) => Self::String,
+            Value::Array(_) => Self::Array,
+            Value::Object(_) => panic!("`ValueType` does not allow `Object`"),
+        }
+    }
 }

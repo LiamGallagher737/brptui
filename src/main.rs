@@ -1,7 +1,7 @@
 use bevy_remote::builtin_methods::{BrpDestroyParams, BrpRemoveParams};
 use brp::{handle_components_querying, EntityMeta};
 use disqualified::ShortName;
-use inspector::{Inspector, InspectorState};
+use inspector::{Inspector, InspectorState, ValueType};
 use keybinds::{KeybindDisplay, KeybindSet};
 use paginated_list::{PaginatedList, PaginatedListState};
 use ratatui::{
@@ -103,6 +103,8 @@ fn main() -> std::io::Result<()> {
         .when_focus("x", "despawn", [Focus::Entities])
         .when_focus("x", "remove", [Focus::Components])
         .when_focus("[]", "move page", [Focus::Entities, Focus::Components])
+        .when_inspector_value("t", "toggle", [ValueType::Bool])
+        .when_inspector_value("e", "edit", [ValueType::Number, ValueType::String])
         .when_connected("hjkl/←↓↑→", "move")
         .always("q", "quit");
 
@@ -223,7 +225,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
 
             if let Some(selected_component) = components.get(components_list.selected()) {
                 frame.render_stateful_widget(
-                    Inspector::new(&selected_component.1, *focus == Focus::Inspector)
+                    Inspector::new(&selected_component.1, *focus == Focus::Inspector, inspector)
                         .block(inspector_block),
                     body_layout[2],
                     inspector,

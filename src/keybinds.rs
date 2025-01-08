@@ -1,4 +1,4 @@
-use crate::{Focus, State};
+use crate::{inspector::ValueType, Focus, State};
 use ratatui::{
     prelude::{Buffer, Rect},
     style::{Style, Stylize},
@@ -18,6 +18,7 @@ pub enum KeybindCondition {
     Always,
     Connected,
     Focus(Vec<Focus>),
+    InspectorValue(Vec<ValueType>),
     Custom(Box<dyn Fn(&State) -> bool + Send>),
 }
 
@@ -67,19 +68,16 @@ impl KeybindSet {
         self.add(keys, description, KeybindCondition::Focus(focus.into()))
     }
 
-    pub fn when<F>(
+    pub fn when_inspector_value(
         &mut self,
         keys: impl Into<String>,
         description: impl Into<String>,
-        condition: F,
-    ) -> &mut Self
-    where
-        F: Fn(&State) -> bool + Send + 'static,
-    {
+        value: impl Into<Vec<ValueType>>,
+    ) -> &mut Self {
         self.add(
             keys,
             description,
-            KeybindCondition::Custom(Box::new(condition)),
+            KeybindCondition::InspectorValue(value.into()),
         )
     }
 
@@ -96,6 +94,17 @@ impl KeybindSet {
                     } else {
                         false
                     }
+                }
+                KeybindCondition::InspectorValue(values) => {
+                    if let State::Connected {
+                        focus, inspector, ..
+                    } = state
+                    {
+                        if *focus == Focus::Inspector {
+                            return values.contains(&inspector.selected_value_type());
+                        }
+                    }
+                    false
                 }
                 KeybindCondition::Custom(func) => func(state),
             })
