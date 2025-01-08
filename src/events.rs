@@ -1,7 +1,7 @@
 //! Logic for handling [`event::Event`]s.
 
 use crate::Message;
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use std::sync::mpsc;
 
 /// Resulting [`Message`]s will be sent using the given [`mpsc::Sender`] to the
@@ -28,6 +28,7 @@ fn handle_key(key: event::KeyEvent) -> Option<Message> {
         KeyCode::PageUp | KeyCode::Char('[') => Some(Message::PageUp),
         KeyCode::PageDown | KeyCode::Char(']') => Some(Message::PageDown),
         KeyCode::Delete | KeyCode::Char('x') => Some(Message::Delete),
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Message::Quit),
         KeyCode::Char('q') => Some(Message::Quit),
         _ => None,
     }
