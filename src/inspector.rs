@@ -126,7 +126,9 @@ impl StatefulWidget for Inspector<'_> {
             if selected_y > state.scroll + area.height.saturating_sub(6) as usize {
                 state.scroll += 1;
             }
-            state.scroll = state.scroll.min(flat_map.len().saturating_sub(area.height as usize));
+            state.scroll = state
+                .scroll
+                .min(flat_map.len().saturating_sub(area.height as usize));
             let upper_limit = (state.scroll + area.height as usize).min(flat_map.len());
 
             state.selected = state.selected.min(flat_map.len() - 1);
@@ -224,7 +226,8 @@ impl StatefulWidget for Inspector<'_> {
                             _ => unreachable!(),
                         };
 
-                        let label_line = Line::from(vec![
+                        let mut spans = Vec::new();
+                        spans.push(
                             Span::raw(format!(
                                 "{}{}{LINE_HORIZONTAL} ",
                                 (0..*indent_level)
@@ -239,10 +242,13 @@ impl StatefulWidget for Inspector<'_> {
                                 },
                             ))
                             .dim(),
-                            Span::raw(name).fg(color).bold(),
-                            Span::raw(": ").fg(color).bold(),
-                            Span::raw(c).bold(),
-                        ]);
+                        );
+                        if let Some(name) = name {
+                            spans.push(Span::raw(name).fg(color).bold());
+                            spans.push(Span::raw(": ").fg(color).bold());
+                        }
+                        spans.push(Span::raw(c).bold());
+                        let label_line = Line::from(spans);
                         label_line.render(rect, buf);
 
                         field_index += 1;
@@ -309,7 +315,7 @@ impl Widget for InspectorValue<'_> {
 #[derive(Debug)]
 enum InspecotorLine {
     ObjectStart {
-        name: String,
+        name: Option<String>,
         indent_level: u16,
     },
     ObjectField {
@@ -321,7 +327,7 @@ enum InspecotorLine {
         indent_level: u16,
     },
     ArrayStart {
-        name: String,
+        name: Option<String>,
         indent_level: u16,
         value_type: ValueType,
     },
@@ -340,7 +346,7 @@ fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<Inspeco
         match value {
             Value::Object(map) => {
                 vec.push(InspecotorLine::ObjectStart {
-                    name: name.to_owned(),
+                    name: Some(name.to_owned()),
                     indent_level,
                 });
                 vec.append(&mut flatten_value_map(map, indent_level + 1));
@@ -348,7 +354,7 @@ fn flatten_value_map(map: &Map<String, Value>, indent_level: u16) -> Vec<Inspeco
             }
             Value::Array(items) => {
                 vec.push(InspecotorLine::ArrayStart {
-                    name: name.to_owned(),
+                    name: Some(name.to_owned()),
                     indent_level,
                     value_type: ValueType::from(value),
                 });
