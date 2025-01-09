@@ -68,9 +68,7 @@ impl InspectorState {
     }
 
     pub fn update_value_types(&mut self, value: &Value) {
-        let mut flat_map = Vec::new();
-        flatten_value(None, value, &mut flat_map, 0);
-        self.value_types = flat_map
+        self.value_types = flatten_value(value)
             .iter()
             .filter_map(InspectorLine::value_type)
             .collect();
@@ -91,8 +89,7 @@ impl StatefulWidget for Inspector<'_> {
             return;
         }
 
-        let mut flat_map = Vec::new();
-        flatten_value(None, self.value, &mut flat_map, 0);
+        let flat_map = flatten_value(self.value);
 
         state.update_selected(&flat_map);
         state.update_scroll(&flat_map, area.height);
@@ -182,7 +179,7 @@ impl InspectorState {
 #[derive(Debug)]
 struct InspectorLine<'a> {
     name: Option<&'a str>,
-    path: Option<String>,
+    path: String,
     indent_level: u16,
     kind: InspectorLineKind<'a>,
 }
@@ -205,16 +202,23 @@ enum PrimitiveValue<'a> {
     String(&'a str),
 }
 
-fn flatten_value<'a>(
+fn flatten_value<'a>(value: &'a Value) -> Vec<InspectorLine<'a>> {
+    let mut flat_map = Vec::new();
+    flatten_value_inner(None, value, &mut flat_map, String::new(), 0);
+    flat_map
+}
+
+fn flatten_value_inner<'a>(
     name: Option<&'a str>,
     value: &'a Value,
     out: &mut Vec<InspectorLine<'a>>,
+    base_path: String,
     indent_level: u16,
 ) {
     match value {
         Value::Null => out.push(InspectorLine {
             name,
-            path: None,
+            path: base_path,
             indent_level,
             kind: InspectorLineKind::Item {
                 value: PrimitiveValue::Null,
@@ -222,7 +226,7 @@ fn flatten_value<'a>(
         }),
         Value::Bool(b) => out.push(InspectorLine {
             name,
-            path: None,
+            path: base_path,
             indent_level,
             kind: InspectorLineKind::Item {
                 value: PrimitiveValue::Bool(*b),
@@ -230,7 +234,7 @@ fn flatten_value<'a>(
         }),
         Value::Number(n) => out.push(InspectorLine {
             name,
-            path: None,
+            path: base_path,
             indent_level,
             kind: InspectorLineKind::Item {
                 value: PrimitiveValue::Number(n.to_owned()),
@@ -238,7 +242,7 @@ fn flatten_value<'a>(
         }),
         Value::String(s) => out.push(InspectorLine {
             name,
-            path: None,
+            path: base_path,
             indent_level,
             kind: InspectorLineKind::Item {
                 value: PrimitiveValue::String(s),
@@ -248,16 +252,22 @@ fn flatten_value<'a>(
         Value::Array(array) => {
             out.push(InspectorLine {
                 name,
-                path: None,
+                path: base_path.to_owned(),
                 indent_level,
                 kind: InspectorLineKind::ArrayStart,
             });
-            for value in array {
-                flatten_value(None, value, out, indent_level + 1);
+            for (n, value) in array.iter().enumerate() {
+                flatten_value_inner(
+                    None,
+                    value,
+                    out,
+                    format!("{base_path}[{n}]"),
+                    indent_level + 1,
+                );
             }
             out.push(InspectorLine {
                 name: None,
-                path: None,
+                path: base_path,
                 indent_level,
                 kind: InspectorLineKind::ArrayEnd,
             });
@@ -266,16 +276,22 @@ fn flatten_value<'a>(
         Value::Object(map) => {
             out.push(InspectorLine {
                 name,
-                path: None,
+                path: base_path.to_owned(),
                 indent_level,
                 kind: InspectorLineKind::ObjectStart,
             });
             for (name, value) in map {
-                flatten_value(Some(name), value, out, indent_level + 1);
+                flatten_value_inner(
+                    Some(name),
+                    value,
+                    out,
+                    format!("{base_path}.{name}"),
+                    indent_level + 1,
+                );
             }
             out.push(InspectorLine {
                 name: None,
-                path: None,
+                path: base_path,
                 indent_level,
                 kind: InspectorLineKind::ObjectEnd,
             });
