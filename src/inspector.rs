@@ -156,7 +156,7 @@ impl StatefulWidget for Inspector<'_> {
 }
 
 impl InspectorState {
-    fn update_scroll(&mut self, flat_map: &Vec<InspectorLine<'_>>, height: u16) {
+    fn update_scroll(&mut self, flat_map: &[InspectorLine<'_>], height: u16) {
         let selected_line_y = flat_map
             .iter()
             .enumerate()
@@ -175,8 +175,8 @@ impl InspectorState {
             .min(flat_map.len().saturating_sub(height as usize));
     }
 
-    fn update_selected(&mut self, flat_map: &Vec<InspectorLine<'_>>) {
-        self.selected = self.selected.min(flat_map.len() - 1);
+    fn update_selected(&mut self, flat_map: &[InspectorLine<'_>]) {
+        self.selected = self.selected.min(flat_map.len().saturating_sub(1));
     }
 }
 
@@ -216,7 +216,7 @@ fn flatten_value<'a>(
         Value::Null => out.push(InspectorLine {
             name,
             path: None,
-            indent_level: indent_level,
+            indent_level,
             kind: InspectorLineKind::Item {
                 value: PrimitiveValue::Null,
             },
@@ -224,7 +224,7 @@ fn flatten_value<'a>(
         Value::Bool(b) => out.push(InspectorLine {
             name,
             path: None,
-            indent_level: indent_level,
+            indent_level,
             kind: InspectorLineKind::Item {
                 value: PrimitiveValue::Bool(*b),
             },
@@ -232,7 +232,7 @@ fn flatten_value<'a>(
         Value::Number(n) => out.push(InspectorLine {
             name,
             path: None,
-            indent_level: indent_level,
+            indent_level,
             kind: InspectorLineKind::Item {
                 value: PrimitiveValue::Number(n.to_owned()),
             },
@@ -240,7 +240,7 @@ fn flatten_value<'a>(
         Value::String(s) => out.push(InspectorLine {
             name,
             path: None,
-            indent_level: indent_level,
+            indent_level,
             kind: InspectorLineKind::Item {
                 value: PrimitiveValue::String(s),
             },
@@ -253,7 +253,6 @@ fn flatten_value<'a>(
                 indent_level,
                 kind: InspectorLineKind::ArrayStart,
             });
-            // flatten_array_items(array, out, indent_level + 1);
             for value in array {
                 flatten_value(None, value, out, indent_level + 1);
             }

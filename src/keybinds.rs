@@ -19,7 +19,6 @@ pub enum KeybindCondition {
     Connected,
     Focus(Vec<Focus>),
     InspectorValue(Vec<ValueType>),
-    Custom(Box<dyn Fn(&State) -> bool + Send>),
 }
 
 // Collection of keybinds with helper methods
@@ -106,7 +105,6 @@ impl KeybindSet {
                     }
                     false
                 }
-                KeybindCondition::Custom(func) => func(state),
             })
             .map(|kb| (kb.keys.as_str(), kb.description.as_str()))
             .collect()
