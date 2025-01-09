@@ -1,7 +1,7 @@
 use crate::PRIMARY_COLOR;
 use ratatui::{
     prelude::{BlockExt, Buffer, Rect},
-    style::{Color, Stylize},
+    style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, StatefulWidget, Widget},
 };
@@ -40,6 +40,7 @@ impl<'a> Inspector<'a> {
 #[derive(Debug, Default)]
 pub struct InspectorState {
     selected: usize,
+    paths: Vec<String>,
     value_types: Vec<ValueType>,
     scroll: usize,
 }
@@ -52,27 +53,6 @@ pub enum ValueType {
     String,
     Array,
     Object,
-}
-
-impl InspectorState {
-    pub fn select_previous(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
-    }
-
-    pub fn select_next(&mut self) {
-        self.selected = (self.selected + 1).min(self.value_types.len() - 1);
-    }
-
-    pub fn selected_value_type(&self) -> ValueType {
-        self.value_types[self.selected]
-    }
-
-    pub fn update_value_types(&mut self, value: &Value) {
-        self.value_types = flatten_value(value)
-            .iter()
-            .filter_map(InspectorLine::value_type)
-            .collect();
-    }
 }
 
 impl StatefulWidget for Inspector<'_> {
@@ -91,14 +71,11 @@ impl StatefulWidget for Inspector<'_> {
 
         let flat_map = flatten_value(self.value);
 
+        state.update_paths(&flat_map);
+        state.update_value_types(&flat_map);
         state.update_selected(&flat_map);
         state.update_scroll(&flat_map, area.height);
         let upper_limit = (state.scroll + area.height as usize).min(flat_map.len());
-
-        let mut selectable_index = flat_map[0..state.scroll]
-            .iter()
-            .filter(|l| l.selectable())
-            .count();
 
         for (y, line) in flat_map[state.scroll..upper_limit].iter().enumerate() {
             let mut rect = Rect {
@@ -108,7 +85,7 @@ impl StatefulWidget for Inspector<'_> {
                 y: area.y + y as u16,
             };
 
-            let selected = self.focused && selectable_index == state.selected;
+            let selected = self.focused && line.path == state.selected_path();
 
             // Since the indent is just blank space there is no point rendering anything and the
             // space can just be subtracted from the lines rect.
@@ -116,18 +93,22 @@ impl StatefulWidget for Inspector<'_> {
 
             if let Some(name) = line.name {
                 let name_rect = split_rect(&mut rect, name.len() as u16 + 2);
-
                 Line::from(vec![Span::raw(name), Span::raw(": ")])
                     .bold()
+                    .fg(if selected {
+                        PRIMARY_COLOR
+                    } else {
+                        Color::Reset
+                    })
                     .render(name_rect, buf);
             }
 
             match &line.kind {
-                InspectorLineKind::ObjectStart => render_char(rect, buf, '{'),
-                InspectorLineKind::ObjectEnd => render_char(rect, buf, '}'),
+                InspectorLineKind::ObjectStart => render_char(rect, buf, '{', selected),
+                InspectorLineKind::ObjectEnd => render_char(rect, buf, '}', selected),
 
-                InspectorLineKind::ArrayStart => render_char(rect, buf, '['),
-                InspectorLineKind::ArrayEnd => render_char(rect, buf, ']'),
+                InspectorLineKind::ArrayStart => render_char(rect, buf, '[', selected),
+                InspectorLineKind::ArrayEnd => render_char(rect, buf, ']', selected),
 
                 InspectorLineKind::Item { value } => {
                     let span = match value {
@@ -143,16 +124,47 @@ impl StatefulWidget for Inspector<'_> {
                     };
                 }
             }
-
-            if line.selectable() {
-                selectable_index += 1;
-            }
         }
     }
 }
 
 impl InspectorState {
-    fn update_scroll(&mut self, flat_map: &[InspectorLine<'_>], height: u16) {
+    pub fn select_previous(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    pub fn select_next(&mut self) {
+        self.selected = (self.selected + 1).min(self.value_types.len() - 1);
+    }
+
+    pub fn selected_path(&self) -> &str {
+        &self.paths[self.selected]
+    }
+
+    pub fn selected_value_type(&self) -> ValueType {
+        self.value_types[self.selected]
+    }
+
+    fn update_paths(&mut self, flat_map: &[InspectorLine]) {
+        self.paths = flat_map
+            .iter()
+            // Filter block ends to avoid duplicates.
+            .filter(|line| match line.kind {
+                InspectorLineKind::ArrayEnd | InspectorLineKind::ObjectEnd => false,
+                _ => true,
+            })
+            .map(|line| line.path.clone())
+            .collect()
+    }
+
+    fn update_value_types(&mut self, flat_map: &[InspectorLine]) {
+        self.value_types = flat_map
+            .iter()
+            .filter_map(InspectorLine::value_type)
+            .collect();
+    }
+
+    fn update_scroll(&mut self, flat_map: &[InspectorLine], height: u16) {
         let selected_line_y = flat_map
             .iter()
             .enumerate()
@@ -171,7 +183,7 @@ impl InspectorState {
             .min(flat_map.len().saturating_sub(height as usize));
     }
 
-    fn update_selected(&mut self, flat_map: &[InspectorLine<'_>]) {
+    fn update_selected(&mut self, flat_map: &[InspectorLine]) {
         self.selected = self.selected.min(flat_map.len().saturating_sub(1));
     }
 }
@@ -304,6 +316,8 @@ impl InspectorLine<'_> {
     fn value_type(&self) -> Option<ValueType> {
         match &self.kind {
             InspectorLineKind::Item { value } => Some(ValueType::from(value)),
+            InspectorLineKind::ArrayStart => Some(ValueType::Array),
+            InspectorLineKind::ObjectStart => Some(ValueType::Object),
             _ => None,
         }
     }
@@ -323,8 +337,11 @@ fn split_rect(rect: &mut Rect, width: u16) -> Rect {
     new_rect
 }
 
-fn render_char(rect: Rect, buf: &mut Buffer, ch: char) {
+fn render_char(rect: Rect, buf: &mut Buffer, ch: char, selected: bool) {
     buf[rect.as_position()].set_char(ch);
+    if selected {
+        buf[rect.as_position()].set_style(Style::default().fg(PRIMARY_COLOR).bold());
+    }
 }
 
 impl From<&PrimitiveValue<'_>> for ValueType {
