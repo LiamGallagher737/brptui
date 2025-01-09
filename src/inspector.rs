@@ -148,11 +148,7 @@ impl InspectorState {
     fn update_paths(&mut self, flat_map: &[InspectorLine]) {
         self.paths = flat_map
             .iter()
-            // Filter block ends to avoid duplicates.
-            .filter(|line| match line.kind {
-                InspectorLineKind::ArrayEnd | InspectorLineKind::ObjectEnd => false,
-                _ => true,
-            })
+            .filter(|line| line.selectable())
             .map(|line| line.path.clone())
             .collect()
     }
@@ -214,7 +210,7 @@ enum PrimitiveValue<'a> {
     String(&'a str),
 }
 
-fn flatten_value<'a>(value: &'a Value) -> Vec<InspectorLine<'a>> {
+fn flatten_value(value: &Value) -> Vec<InspectorLine> {
     let mut flat_map = Vec::new();
     flatten_value_inner(None, value, &mut flat_map, String::new(), 0);
     flat_map
