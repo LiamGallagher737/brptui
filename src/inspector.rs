@@ -119,14 +119,9 @@ impl StatefulWidget for Inspector<'_> {
 
             if let Some(name) = line.name {
                 let name_rect = split_rect(&mut rect, name.len() as u16 + 2);
-                let color = if selected {
-                    PRIMARY_COLOR
-                } else {
-                    Color::Reset
-                };
+
                 Line::from(vec![Span::raw(name), Span::raw(": ")])
                     .bold()
-                    .fg(color)
                     .render(name_rect, buf);
             }
 
@@ -144,7 +139,11 @@ impl StatefulWidget for Inspector<'_> {
                         PrimitiveValue::Number(n) => Span::raw(n.to_string()),
                         PrimitiveValue::String(s) => Span::raw(*s),
                     };
-                    span.render(rect, buf);
+                    if selected {
+                        span.fg(PRIMARY_COLOR).bold().render(rect, buf);
+                    } else {
+                        span.render(rect, buf);
+                    };
                 }
             }
 
@@ -288,11 +287,7 @@ impl InspectorLine<'_> {
     /// The [`ValueType`] of this line to determine which keybinds to show.
     fn value_type(&self) -> Option<ValueType> {
         match &self.kind {
-            InspectorLineKind::ObjectStart if self.name.is_some() => Some(ValueType::Object),
-            InspectorLineKind::ArrayStart if self.name.is_some() => Some(ValueType::Array),
-            InspectorLineKind::Item { value } if self.name.is_some() => {
-                Some(ValueType::from(value))
-            }
+            InspectorLineKind::Item { value } => Some(ValueType::from(value)),
             _ => None,
         }
     }
