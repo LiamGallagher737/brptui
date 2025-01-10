@@ -327,9 +327,10 @@ impl InspectorLine<'_> {
 /// Take the given `width` off the front of the given `rect` and return a new rect containing that
 /// space.
 fn split_rect(rect: &mut Rect, width: u16) -> Rect {
-    let new_rect = Rect { width, ..*rect };
-    rect.width -= width;
-    rect.x += width;
+    let new_width = rect.width.min(width);
+    let new_rect = Rect { width: new_width, ..*rect };
+    rect.width -= new_width;
+    rect.x += new_width;
     new_rect
 }
 
