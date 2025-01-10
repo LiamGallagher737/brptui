@@ -137,6 +137,14 @@ impl InspectorState {
         self.selected = (self.selected + 1).min(self.value_types.len() - 1);
     }
 
+    pub fn select_first(&mut self) {
+        self.selected = 0;
+    }
+
+    pub fn select_last(&mut self) {
+        self.selected = self.value_types.len() - 1;
+    }
+
     pub fn selected_path(&self) -> &str {
         &self.paths[self.selected]
     }
@@ -168,12 +176,16 @@ impl InspectorState {
             .nth(self.selected)
             .map(|(y, _)| y)
             .unwrap_or_default();
-        if selected_line_y < self.scroll + 6 {
-            self.scroll = self.scroll.saturating_sub(1);
+
+        let top_margin = 6;
+        let bottom_margin = height.saturating_sub(6) as usize;
+
+        if selected_line_y < self.scroll + top_margin {
+            self.scroll = selected_line_y.saturating_sub(top_margin);
+        } else if selected_line_y > self.scroll + bottom_margin {
+            self.scroll = selected_line_y.saturating_sub(bottom_margin);
         }
-        if selected_line_y > self.scroll + height.saturating_sub(6) as usize {
-            self.scroll += 1;
-        }
+
         self.scroll = self
             .scroll
             .min(flat_map.len().saturating_sub(height as usize));
@@ -328,7 +340,10 @@ impl InspectorLine<'_> {
 /// space.
 fn split_rect(rect: &mut Rect, width: u16) -> Rect {
     let new_width = rect.width.min(width);
-    let new_rect = Rect { width: new_width, ..*rect };
+    let new_rect = Rect {
+        width: new_width,
+        ..*rect
+    };
     rect.width -= new_width;
     rect.x += new_width;
     new_rect

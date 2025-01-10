@@ -27,6 +27,8 @@ fn handle_key(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Down | KeyCode::Char('j') => Some(Message::MoveDown),
         KeyCode::PageUp | KeyCode::Char('[') => Some(Message::PageUp),
         KeyCode::PageDown | KeyCode::Char(']') => Some(Message::PageDown),
+        KeyCode::Home => Some(Message::Home),
+        KeyCode::End => Some(Message::End),
         KeyCode::Delete | KeyCode::Char('x') => Some(Message::Delete),
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Message::Quit),
         KeyCode::Char('q') => Some(Message::Quit),

@@ -71,6 +71,8 @@ enum Message {
     MoveDown,
     PageUp,
     PageDown,
+    Home,
+    End,
     Delete,
     SpawnComponnentsThread,
     UpdateEntities(Vec<EntityMeta>),
@@ -315,6 +317,22 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
             handle_movement!(Message::PageDown, state, {
                 Focus::Entities => entities_list select_next_page => Message::SpawnComponnentsThread,
                 Focus::Components => components_list select_next_page,
+            });
+        }
+
+        (Message::Home, state) => {
+            handle_movement!(Message::Home, state, {
+                Focus::Entities => entities_list select_first,
+                Focus::Components => components_list select_first,
+                Focus::Inspector => inspector select_first,
+            });
+        }
+
+        (Message::End, state) => {
+            handle_movement!(Message::Home, state, {
+                Focus::Entities => entities_list select_last,
+                Focus::Components => components_list select_last,
+                Focus::Inspector => inspector select_last,
             });
         }
 

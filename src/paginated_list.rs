@@ -41,6 +41,8 @@ enum CursorMove {
     Next,
     PreviousPage,
     NextPage,
+    First,
+    Last,
 }
 
 impl PaginatedListState {
@@ -68,6 +70,16 @@ impl PaginatedListState {
         self.cursor_move = Some(CursorMove::NextPage);
     }
 
+    pub fn select_first(&mut self) {
+        assert!(self.cursor_move.is_none(), "cursor_move is set");
+        self.cursor_move = Some(CursorMove::First);
+    }
+
+    pub fn select_last(&mut self) {
+        assert!(self.cursor_move.is_none(), "cursor_move is set");
+        self.cursor_move = Some(CursorMove::Last);
+    }
+
     fn apply_cursor_move(&mut self, per_page: usize, items: usize) {
         let total_pages = items.div_ceil(per_page);
         match self.cursor_move {
@@ -86,6 +98,8 @@ impl PaginatedListState {
                 self.selected -= per_page * (total_pages - 1)
             }
             Some(CursorMove::NextPage) => self.selected += per_page,
+            Some(CursorMove::First) => self.selected = 0,
+            Some(CursorMove::Last) => self.selected = usize::MAX,
 
             None => {}
         }
