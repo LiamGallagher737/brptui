@@ -246,7 +246,7 @@ fn view(model: &mut Model, frame: &mut Frame) {
 }
 
 macro_rules! handle_movement {
-    ($msg:expr, $state:expr, {
+    ($state:expr, {
         $($focus_pattern:pat => $list:ident $method:ident $(=> $after:expr)?),* $(,)?
     }) => {
         if let State::Connected { focus, $($list,)* .. } = $state {
@@ -291,7 +291,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
 
         // Movement within panels
         (Message::MoveUp, state) => {
-            handle_movement!(Message::MoveUp, state, {
+            handle_movement!(state, {
                 Focus::Entities => entities_list select_previous => Message::SpawnComponnentsThread,
                 Focus::Components => components_list select_previous,
                 Focus::Inspector => inspector select_previous,
@@ -299,7 +299,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         }
 
         (Message::MoveDown, state) => {
-            handle_movement!(Message::MoveDown, state, {
+            handle_movement!(state, {
                 Focus::Entities => entities_list select_next => Message::SpawnComponnentsThread,
                 Focus::Components => components_list select_next,
                 Focus::Inspector => inspector select_next,
@@ -307,21 +307,21 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         }
 
         (Message::PageUp, state) => {
-            handle_movement!(Message::PageUp, state, {
+            handle_movement!(state, {
                 Focus::Entities => entities_list select_previous_page => Message::SpawnComponnentsThread,
                 Focus::Components => components_list select_previous_page,
             });
         }
 
         (Message::PageDown, state) => {
-            handle_movement!(Message::PageDown, state, {
+            handle_movement!(state, {
                 Focus::Entities => entities_list select_next_page => Message::SpawnComponnentsThread,
                 Focus::Components => components_list select_next_page,
             });
         }
 
         (Message::Home, state) => {
-            handle_movement!(Message::Home, state, {
+            handle_movement!(state, {
                 Focus::Entities => entities_list select_first,
                 Focus::Components => components_list select_first,
                 Focus::Inspector => inspector select_first,
@@ -329,7 +329,7 @@ fn update(model: &mut Model, msg: Message) -> Option<Message> {
         }
 
         (Message::End, state) => {
-            handle_movement!(Message::Home, state, {
+            handle_movement!(state, {
                 Focus::Entities => entities_list select_last,
                 Focus::Components => components_list select_last,
                 Focus::Inspector => inspector select_last,
